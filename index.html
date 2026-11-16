@@ -152,6 +152,7 @@ canvas{width:100%;height:170px;display:block}
 <div id="timer" hidden></div>
 <div id="modal" hidden></div>
 <div id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script>
 'use strict';
 /* ============ Grundlagen ============ */
@@ -174,12 +175,82 @@ const round25 = x => Math.round(x / 2.5) * 2.5;
 function fresh() {
   return {v:1, name:'', created:null, xp:0, streak:0, bestStreak:0, lastQuestDate:null, lastProcessed:null,
     days:{}, questHistory:{}, penalty:null, workouts:[], active:null, bw:[], prs:{}, rot:0,
-    titles:[], dungeons:[], weekly:{}, tests:[], peak:null, cnt:{daily:0, cardio:0, penalties:0}};
+    titles:[], dungeons:[], weekly:{}, tests:[], peak:null, cnt:{daily:0, cardio:0, penalties:0},
+    acc:null, feedQ:[], weekXP:null, updatedAt:0, lastSync:null, syncErr:null};
 }
 let S;
 try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fresh(); }
 S = Object.assign(fresh(), S);
-function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Speichern fehlgeschlagen'); } }
+function writeLocal() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Speichern fehlgeschlagen'); } }
+function save() { S.updatedAt = Date.now(); writeLocal(); if (S.acc) schedulePush(); }
+
+/* ============ Cloud: Login, Sync, Feed ============ */
+const SB_URL = 'https://lgcfrtogubozltbckqom.supabase.co';
+const SB_KEY = 'sb_publishable_iEY_GxDnGj3A3sSsV3fDZA_c6XUukIE'; // öffentlicher Schlüssel, Schutz über Row Level Security
+const sb = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY, {auth: {persistSession: true, autoRefreshToken: true, storageKey: 'ascend_auth'}}) : null;
+const mailOf = u => u.toLowerCase() + '@ascend.invalid';
+let pushT = null, pushing = false;
+function schedulePush() { clearTimeout(pushT); pushT = setTimeout(pushNow, 2500); }
+function feed(kind, text) { if (!S.acc) return; (S.feedQ = S.feedQ || []).push({kind, text, created_at: new Date().toISOString()}); }
+function publicProfile() {
+  const st = stats(), li = levelInfo(S.xp), wk = weekKey(dkey()), bw = curBW() || 80, p = n => S.prs[n] || 0;
+  return {id: S.acc.id, username: S.acc.username, level: li.lvl, xp: S.xp, rank: rankOf(st).r,
+    str: st.STR, vit: st.VIT, agi: st.AGI, dis: st.DIS, streak: S.streak, week_key: wk,
+    week_xp: S.weekXP && S.weekXP.k === wk ? S.weekXP.xp : 0,
+    rel_strength: Math.round((p('Bankdrücken') + p('Kniebeugen') + p('Kreuzheben')) / bw * 100) / 100,
+    prs: {bench: p('Bankdrücken'), squat: p('Kniebeugen'), dead: p('Kreuzheben')},
+    title: S.titles[S.titles.length - 1] || null, updated_at: new Date().toISOString()};
+}
+async function pushNow() {
+  if (!sb || !S.acc || !navigator.onLine || pushing) return false;
+  pushing = true;
+  try {
+    const {data: {session}} = await sb.auth.getSession();
+    if (!session) { S.syncErr = 'Nicht angemeldet'; return false; }
+    const q = (S.feedQ || []).slice();
+    const r1 = await sb.from('saves').upsert({id: S.acc.id, data: Object.assign({}, S, {feedQ: []}), updated_at: new Date().toISOString()});
+    const r2 = await sb.from('profiles').upsert(publicProfile());
+    let r3 = {error: null};
+    if (q.length) r3 = await sb.from('feed').insert(q.map(x => ({kind: x.kind, text: x.text, created_at: x.created_at})));
+    if (r1.error || r2.error || r3.error) { S.syncErr = (r1.error || r2.error || r3.error).message; writeLocal(); return false; }
+    if (q.length) S.feedQ = (S.feedQ || []).slice(q.length);
+    S.lastSync = Date.now(); S.syncErr = null; writeLocal();
+    return true;
+  } catch (e) { S.syncErr = 'Keine Verbindung'; return false; }
+  finally { pushing = false; }
+}
+async function pullIfNewer() {
+  if (!sb || !S.acc || !navigator.onLine) return false;
+  const {data, error} = await sb.from('saves').select('data, updated_at').eq('id', S.acc.id).maybeSingle();
+  if (error || !data) return false;
+  const cloud = data.data;
+  if (cloud && (cloud.updatedAt || 0) > (S.updatedAt || 0) + 5000) { const acc = S.acc; S = Object.assign(fresh(), cloud, {acc}); writeLocal(); return true; }
+  return false;
+}
+async function register(u, pin) {
+  const {data, error} = await sb.auth.signUp({email: mailOf(u), password: pin});
+  if (error) throw new Error(/registered|exists/i.test(error.message) ? 'Dieser Name ist schon vergeben' : error.message);
+  if (!data.session) throw new Error('Registrierung fehlgeschlagen. Versuch es nochmal.');
+  S.acc = {id: data.user.id, username: u}; if (!S.name) S.name = u;
+  const r = await sb.from('profiles').upsert(publicProfile());
+  if (r.error) { await sb.auth.signOut(); S.acc = null; throw new Error(/duplicate|unique/i.test(r.error.message) ? 'Dieser Name ist schon vergeben' : r.error.message); }
+  feed('join', 'ist ASCEND beigetreten');
+  save(); await pushNow();
+}
+async function login(u, pin) {
+  const {data, error} = await sb.auth.signInWithPassword({email: mailOf(u), password: pin});
+  if (error) throw new Error('Name oder PIN falsch');
+  const id = data.user.id;
+  const pr = await sb.from('profiles').select('username').eq('id', id).maybeSingle();
+  const name = (pr.data && pr.data.username) || u;
+  const sv = await sb.from('saves').select('data').eq('id', id).maybeSingle();
+  const cloud = sv.data && sv.data.data;
+  const otherAccount = S.acc && S.acc.id !== id;
+  if (cloud && (!S.created || otherAccount || (cloud.updatedAt || 0) > (S.updatedAt || 0))) S = Object.assign(fresh(), cloud);
+  else if (!cloud && otherAccount) S = fresh();
+  S.acc = {id, username: name}; if (!S.name) S.name = name;
+  save(); await pushNow();
+}
 
 /* ============ Testwerte & Werte ============ */
 const DEF = {bw:80, waist:0, bench:{w:60,r:5}, squat:{w:70,r:5}, dead:{w:80,r:5}, ohp:{w:35,r:5}, push:15, pull:3, plank:60, run:1800};
@@ -265,6 +336,7 @@ function processDays() {
   if (missed > 0) {
     S.streak = 0;
     if (!S.penalty || S.penalty.done) S.penalty = makePenalty(t, missed);
+    feed('fail', `hat ${missed === 1 ? 'eine Daily Quest' : missed + ' Daily Quests'} verpasst und muss eine Strafquest machen`);
     save();
     queue(() => sysWin('red', 'Warnung', `<p class="sysbig">STRAFQUEST</p>
       <p>Du hast ${missed === 1 ? 'eine Daily Quest' : missed + ' Daily Quests'} verpasst. Deine Streak ist zurückgesetzt.</p>
@@ -289,14 +361,18 @@ let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
 function gainXP(n, why, force) {
   if (penaltyOpen() && !force) { toast('XP gesperrt: Erst die Strafquest erledigen'); return false; }
-  const before = levelInfo(S.xp).lvl;
+  const before = levelInfo(S.xp).lvl, wk = weekKey(dkey());
+  if (!S.weekXP || S.weekXP.k !== wk) S.weekXP = {k: wk, xp: 0};
+  S.weekXP.xp += n;
   S.xp += n; save(); toast(`+${n} XP · ${why}`);
   const after = levelInfo(S.xp).lvl;
+  if (after > before) feed('level', `ist jetzt Level ${after}`);
   if (after > before) queue(() => sysWin('gold', 'System', `<p class="sysbig">LEVEL UP</p><p style="text-align:center" class="num">Level ${before} → <b>${after}</b></p><p class="small mute" style="text-align:center">Die Quests werden etwas härter.</p>`, [['Weiter', 'close']]));
   return true;
 }
 function checkRank() {
   const ra = rankOf(stats()).r, order = 'EDCBAS', rb = S.rank;
+  if (rb && order.indexOf(ra) > order.indexOf(rb)) feed('rank', `ist zu Rang ${ra} aufgestiegen`);
   if (rb && order.indexOf(ra) > order.indexOf(rb)) queue(() => sysWin('gold', 'Rang-Aufstieg', `<p class="sysbig">RANG ${ra}</p><p style="text-align:center">Du bist von Rang ${rb} auf Rang ${ra} aufgestiegen.</p>`, [['Weiter', 'close']]));
   if (rb !== ra) { S.rank = ra; save(); }
 }
@@ -344,6 +420,7 @@ function checkDungeons() {
     if (ok) {
       d.done = true; d.doneDate = dkey(); if (!S.titles.includes(d.name)) S.titles.push(d.name);
       gainXP(200, 'Dungeon: ' + d.name, true);
+      feed('dungeon', `hat den Dungeon „${d.name}“ geschafft`);
       queue(() => sysWin('gold', 'Dungeon geschafft', `<p class="sysbig">${esc(d.name.toUpperCase())}</p><p style="text-align:center">Neuer Titel freigeschaltet: <b>${esc(d.name)}</b></p>`, [['Weiter', 'close']]));
     }
   }
@@ -398,6 +475,8 @@ function finishWorkout() {
   S.workouts.push({id: Date.now(), date: a.date, type: a.type, min: Math.round((Date.now() - a.start) / 60000), ex});
   S.rot = (TYPES.indexOf(a.type) + 1) % 4; S.active = null; stopTimer(); save();
   const nSets = ex.reduce((s, e) => s + e.sets.length, 0);
+  feed('workout', `hat ${a.type} trainiert (${nSets} ${nSets === 1 ? 'Satz' : 'Sätze'})`);
+  for (const [n, v] of prs) feed('pr', `neuer Rekord: ${n} ${fmt(v)} kg (geschätztes Max)`);
   gainXP(50 + nSets * 4 + prs.length * 30, `${a.type}-Training`);
   for (const [n, v] of prs) queue(() => sysWin('gold', 'Neuer Rekord', `<p class="sysbig">PR</p><p style="text-align:center"><b>${esc(n)}</b><br><span class="num">${fmt(v)} kg</span> geschätztes Maximum</p>`, [['Stark', 'close']]));
   checkDungeons(); checkWeekly(); view = 'status'; render();
@@ -425,27 +504,122 @@ const ICONS = {
   progress:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 20h18M5 16l4-5 4 3 6-8"/></svg>',
   wissen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 012-2h13v16H6a2 2 0 00-2 2z"/><path d="M4 19V5M9 8h6"/></svg>',
 };
-const LABELS = {status:'Status', quests:'Quests', training:'Training', progress:'Fortschritt', wissen:'Wissen'};
+ICONS.ladder = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0z"/><path d="M7 6H4a3 3 0 003 4M17 6h3a3 3 0 01-3 4"/></svg>';
+const LABELS = {status:'Status', quests:'Quests', training:'Training', ladder:'Ladder', progress:'Fortschritt'};
 function renderNav() {
   const n = $('#nav'); n.hidden = false;
   const qDot = penaltyOpen() || !(S.days[dkey()] && S.days[dkey()].done);
   n.innerHTML = Object.keys(LABELS).map(k => `<button data-a="nav" data-v="${k}" class="${view === k ? 'on' : ''}" aria-label="${LABELS[k]}">${ICONS[k]}${LABELS[k]}${k === 'quests' && qDot ? '<span class="dot"></span>' : ''}${k === 'training' && S.active ? '<span class="dot" style="background:var(--green);box-shadow:0 0 8px var(--green)"></span>' : ''}</button>`).join('');
 }
 function render() {
+  if (!S.acc) { renderAuth(); return; }
   if (!S.created || ob) { renderOb(); return; }
   today(); checkRank();
   const app = $('#app');
-  app.innerHTML = ({status: vStatus, quests: vQuests, training: vTraining, progress: vProgress, wissen: vWissen})[view]();
+  app.innerHTML = ({status: vStatus, quests: vQuests, training: vTraining, ladder: vLadder, progress: vProgress, wissen: vWissen})[view]();
   renderNav();
   if (view === 'progress') requestAnimationFrame(drawCharts);
+  if (view === 'ladder') loadLadder();
 }
+
+/* ============ Anmeldung ============ */
+let authMode = 'new', authBusy = false;
+function renderAuth() {
+  $('#nav').hidden = true;
+  const app = $('#app');
+  if (!sb) {
+    app.innerHTML = `<section class="win"><h2><span>◆ System</span></h2><div class="stack"><p class="ob-big">Keine Verbindung</p>
+      <p>Für die erste Anmeldung braucht ASCEND einmal Internet. Danach funktioniert die App auch offline.</p><button class="btn pri full" data-a="reload">Nochmal versuchen</button></div></section>`;
+    return;
+  }
+  const isNew = authMode === 'new';
+  app.innerHTML = `<h1 style="font-size:22px;letter-spacing:.24em;text-align:center;padding-block:18px 4px">ASCEND</h1>
+  <section class="win"><h2><span>◆ ${isNew ? 'Spieler erstellen' : 'Anmelden'}</span></h2><div class="stack">
+    <div class="grid2"><button class="btn ${isNew ? 'pri' : 'ghost'}" data-a="authMode" data-v="new">Neu hier</button><button class="btn ${isNew ? 'ghost' : 'pri'}" data-a="authMode" data-v="login">Anmelden</button></div>
+    ${isNew && S.created ? '<p class="small" style="margin:0;color:var(--green)">Dein bisheriger Fortschritt auf diesem Handy wird in deinen neuen Account übernommen.</p>' : ''}
+    <form id="authForm" class="stack" novalidate>
+      <label>Benutzername<input id="auName" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="20" placeholder="3–20 Zeichen: Buchstaben, Zahlen, _"></label>
+      <label>PIN (6 Ziffern)<input id="auPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="${isNew ? 'new-password' : 'current-password'}" placeholder="••••••"></label>
+      ${isNew ? '<label>PIN wiederholen<input id="auPin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="new-password" placeholder="••••••"></label>' : ''}
+      <div id="auErr" class="small" style="color:#ffb3c0" role="alert"></div>
+      <button class="btn pri full" type="submit" id="auBtn">${isNew ? 'Account erstellen' : 'Anmelden'}</button>
+    </form>
+    <p class="small mute" style="margin:0">${isNew ? 'Deine Freunde sehen deinen Namen, Level, Rang, Werte, Streak und Rekorde. Körpergewicht und einzelne Sätze bleiben privat.' : 'Melde dich mit deinem Namen und deiner PIN an. Dein Fortschritt wird aus der Cloud geladen.'}</p>
+  </div></section>`;
+}
+async function submitAuth() {
+  if (authBusy) return;
+  const u = $('#auName').value.trim(), pin = $('#auPin').value.trim(), err = $('#auErr');
+  err.textContent = '';
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(u)) { err.textContent = 'Der Name braucht 3–20 Zeichen: nur Buchstaben, Zahlen und _'; return; }
+  if (!/^\d{6}$/.test(pin)) { err.textContent = 'Die PIN muss genau 6 Ziffern haben'; return; }
+  if (authMode === 'new' && $('#auPin2').value.trim() !== pin) { err.textContent = 'Die beiden PINs stimmen nicht überein'; return; }
+  if (!navigator.onLine) { err.textContent = 'Keine Internetverbindung. Verbinde dich und versuch es nochmal.'; return; }
+  authBusy = true; $('#auBtn').disabled = true; $('#auBtn').textContent = 'Einen Moment…';
+  try {
+    if (authMode === 'new') await register(u, pin); else await login(u, pin);
+    authBusy = false; processDays(); view = 'status'; render();
+    toast(authMode === 'new' ? 'Account erstellt' : 'Angemeldet');
+  } catch (e) {
+    authBusy = false; err.textContent = e.message || 'Das hat nicht geklappt. Versuch es nochmal.';
+    $('#auBtn').disabled = false; $('#auBtn').textContent = authMode === 'new' ? 'Account erstellen' : 'Anmelden';
+  }
+}
+
+/* ============ Ladder & Feed ============ */
+let board = 'week', ladder = null;
+const BOARDS = {
+  week: {name:'Woche', hint:'XP dieser Woche, Reset jeden Montag', val:p => p.week_key === weekKey(dkey()) ? p.week_xp : 0, show:v => `${v} XP`},
+  total:{name:'Gesamt', hint:'Gesamt-XP, also Level und Rang', val:p => p.xp, show:(v, p) => `Lv ${p.level} · ${p.rank}`},
+  str:  {name:'Kraft', hint:'Bank + Kniebeuge + Kreuzheben (geschätzte Maxima) geteilt durch Körpergewicht', val:p => Number(p.rel_strength), show:v => `${fmt(v, 2)}×`},
+  dis:  {name:'Streak', hint:'Aktuelle Daily-Quest-Streak in Tagen', val:p => p.streak, show:v => `${v} ${v === 1 ? 'Tag' : 'Tage'}`},
+};
+function ago(iso) {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return 'gerade eben'; if (m < 60) return `vor ${m} min`; const h = Math.round(m / 60); if (h < 24) return `vor ${h} h`;
+  const d = Math.round(h / 24); return d === 1 ? 'gestern' : `vor ${d} Tagen`;
+}
+const FEED_ICON = {pr:'▲', level:'◆', rank:'★', dungeon:'⚔', workout:'■', fail:'✕', penalty:'✓', streak:'✦', join:'+', test:'◎'};
+function vLadder() {
+  const B = BOARDS[board];
+  return `<section class="win"><h2><span>◆ Ranked Ladder</span><small id="ldSync">${S.lastSync ? 'Sync ' + ago(new Date(S.lastSync).toISOString()) : ''}</small></h2><div class="stack">
+    <div class="grid2" style="grid-template-columns:repeat(4,1fr);gap:6px">${Object.entries(BOARDS).map(([k, b]) => `<button class="btn sm ${k === board ? 'pri' : 'ghost'}" data-a="board" data-v="${k}">${b.name}</button>`).join('')}</div>
+    <p class="small mute" style="margin:0">${B.hint}</p>
+    <div id="ldBox" class="stack">${ladderRows()}</div></div></section>
+  <section class="win"><h2><span>◆ Feed</span><button class="btn sm ghost" data-a="ldRefresh" style="margin:-6px -6px -6px 0">Aktualisieren</button></h2><div id="fdBox" class="stack">${feedRows()}</div></section>`;
+}
+function ladderRows() {
+  if (!ladder) return '<p class="mute" style="margin:0">Lade Rangliste…</p>';
+  if (ladder.err) return `<p class="mute" style="margin:0">${esc(ladder.err)}</p>`;
+  const B = BOARDS[board], rows = ladder.pr.map(p => ({p, v: B.val(p)})).sort((a, b) => b.v - a.v || b.p.xp - a.p.xp);
+  const medal = ['var(--gold)', '#d5dbe6', '#d08a4e'];
+  return rows.map((r, i) => { const me = S.acc && r.p.id === S.acc.id;
+    return `<div class="row" style="padding:10px;border:1px solid ${me ? 'var(--glow)' : 'var(--line2)'};background:${me ? 'rgba(77,163,255,.12)' : 'var(--panel2)'};flex-wrap:nowrap">
+      <b style="font:700 22px var(--disp);width:28px;color:${medal[i] || 'var(--mute)'}" class="num">${i + 1}</b>
+      <div class="grow"><b>${esc(r.p.username)}</b>${me ? ' <span class="small mute">(du)</span>' : ''}<div class="small mute">Rang ${esc(r.p.rank)} · Lv ${r.p.level}${r.p.title ? ' · ' + esc(r.p.title) : ''}</div></div>
+      <b class="num" style="font:700 16px var(--disp);color:#fff;white-space:nowrap">${B.show(r.v, r.p)}</b></div>`; }).join('') || '<p class="mute" style="margin:0">Noch niemand da. Lade deine Freunde ein: Sie öffnen einfach denselben Link und erstellen einen Account.</p>';
+}
+function feedRows() {
+  if (!ladder) return '<p class="mute" style="margin:0">Lade Feed…</p>';
+  if (ladder.err) return '';
+  return ladder.fd.map(f => `<div class="row" style="flex-wrap:nowrap;align-items:flex-start"><span style="width:18px;text-align:center;color:${f.kind === 'fail' ? 'var(--red)' : f.kind === 'pr' || f.kind === 'dungeon' ? 'var(--gold)' : 'var(--glow)'}">${FEED_ICON[f.kind] || '·'}</span>
+    <div class="grow"><b>${esc(f.username)}</b> ${esc(f.text)}<div class="small mute">${ago(f.created_at)}</div></div></div>`).join('') || '<p class="mute" style="margin:0">Noch keine Einträge.</p>';
+}
+async function loadLadder() {
+  if (!sb || !navigator.onLine) { ladder = ladder || {err: 'Offline. Die Rangliste lädt, sobald du Internet hast.'}; drawLadder(); return; }
+  await pushNow();
+  const [a, b] = await Promise.all([sb.from('profiles').select('*'), sb.from('feed').select('*').order('created_at', {ascending: false}).limit(40)]);
+  ladder = a.error || b.error ? {err: 'Rangliste konnte nicht geladen werden. Versuch es gleich nochmal.'} : {pr: a.data, fd: b.data};
+  drawLadder();
+}
+function drawLadder() { if (view !== 'ladder') return; const l = $('#ldBox'), f = $('#fdBox'); if (l) l.innerHTML = ladderRows(); if (f) f.innerHTML = feedRows(); }
 
 function vStatus() {
   const li = levelInfo(S.xp), st = stats(), rk = rankOf(st), d = today(), t = T();
   const retest = S.tests.length && diffDays(S.tests[S.tests.length - 1].date, dkey()) >= 42;
   const next = TYPES[S.rot];
   return `
-  <div class="row" style="justify-content:space-between"><h1 style="font-size:22px;letter-spacing:.24em">ASCEND</h1><button class="btn sm ghost" data-a="settings">System</button></div>
+  <div class="row" style="justify-content:space-between"><h1 style="font-size:22px;letter-spacing:.24em">ASCEND</h1><div class="row" style="gap:6px"><button class="btn sm ghost" data-a="nav" data-v="wissen">Wissen</button><button class="btn sm ghost" data-a="settings">System</button></div></div>
   <section class="win"><h2><span>◆ Status</span><small>${esc(S.name || 'Spieler')}</small></h2>
     <div class="stack">
       <div class="lvl"><div><div class="cap">LEVEL</div><div class="big num">${li.lvl}</div></div>
@@ -633,7 +807,6 @@ function renderOb() {
     <p class="ob-big">Das System hat dich registriert.</p>
     <p>Bevor die Quests beginnen, misst es deine aktuelle Stärke und Ausdauer. Daraus berechnet es deinen Rang und Quests, die dich fordern, aber nicht überfordern.</p>
     <p class="small mute">Dauer: etwa ein Gym-Besuch. Du kannst jeden Test überspringen und ihn später in der Rang-Prüfung nachholen.</p>
-    <label>Spielername<input id="obName" value="${esc(S.name)}" placeholder="Dein Name" autocomplete="nickname"></label>
     ${nav('Test beginnen', false)}</div></section>`;
   if (st.k === 'body') h = `<section class="win"><h2><span>◆ Körperdaten</span></h2><div class="stack">
     <div class="grid2"><label>Gewicht (kg)<input id="obBw" inputmode="decimal" value="${d.bw || ''}" placeholder="85"></label>
@@ -685,7 +858,7 @@ function renderOb() {
 }
 function obRead(skip) {
   const st = OB[ob.i], d = ob.d;
-  if (st.k === 'intro') S.name = $('#obName').value.trim();
+  if (st.k === 'intro' && S.acc) S.name = S.acc.username;
   if (st.k === 'body') { const bw = num($('#obBw').value); if (!bw) { toast('Bitte dein Gewicht eintragen'); return false; } d.bw = bw; d.waist = num($('#obWaist').value); const p = num($('#obPeak').value); S.peak = p || null; }
   if (skip) return true;
   if (st.k === 'lift') { const w = num($('#obW').value), r = Math.round(num($('#obR').value)); if (!w || !r) { toast('Gewicht und Wiederholungen eintragen oder überspringen'); return false; } d[st.f] = {w, r}; }
@@ -702,6 +875,7 @@ function obFinish() {
   ob = null;
   checkDungeons(); makeDungeons(); save();
   view = 'status'; render(); checkWeekly();
+  feed('test', `hat ${wasRetest ? 'die Rang-Prüfung' : 'den Einstufungstest'} gemacht: Rang ${rankOf(stats()).r}`); save();
   if (wasRetest) gainXP(150, 'Rang-Prüfung', true);
   else queue(() => sysWin('', 'System', `<p class="sysbig">WILLKOMMEN</p><p>Ab jetzt bekommst du jeden Tag 3 Quests zur Auswahl. Verpasst du einen Tag, wartet eine Strafquest.</p><p class="small mute">Tipp: In Safari auf Teilen → „Zum Home-Bildschirm“ tippen, dann läuft ASCEND wie eine App.</p>`, [['Los geht’s', 'close']]));
 }
@@ -709,12 +883,17 @@ function stopSW() { clearInterval(sw.iv); sw.iv = null; }
 
 /* ============ Einstellungen & Backup ============ */
 function settings() {
+  const sync = S.syncErr ? `<span style="color:#ffb3c0">Nicht gesichert: ${esc(S.syncErr)}</span>` : S.lastSync ? `Cloud-Sicherung: ${new Date(S.lastSync).toLocaleString('de-DE', {dateStyle:'short', timeStyle:'short'})}` : 'Noch nicht in der Cloud gesichert';
   sysWin('', 'System', `<div class="stack">
-    <button class="btn full" data-a="export">Backup sichern</button>
+    <div class="small">Angemeldet als <b>${esc(S.acc ? S.acc.username : '')}</b><br><span class="mute">${sync}</span></div>
+    <button class="btn pri full" data-a="syncNow">Jetzt sichern</button>
+    <button class="btn full" data-a="pinAsk">PIN ändern</button>
+    <button class="btn full" data-a="export">Backup als Datei sichern</button>
     <label class="btn full" style="flex-direction:row;justify-content:center;color:var(--glow2)">Backup laden<input type="file" id="importIn" accept="application/json,.json" hidden></label>
     <button class="btn full" data-a="retest">Rang-Prüfung starten</button>
+    <button class="btn full" data-a="logoutAsk">Abmelden</button>
     <button class="btn red full" data-a="resetAsk">Alles zurücksetzen</button>
-    <p class="small mute" style="margin:0">Deine Daten liegen nur auf diesem Gerät. Sichere regelmäßig ein Backup, zum Beispiel in iCloud Drive.</p></div>`, [['Schließen', 'close', 'ghost']]);
+    <p class="small mute" style="margin:0">Jede Änderung wird automatisch in der Cloud gesichert, sobald du Internet hast. Offline speichert die App alles auf dem Handy und sichert es später.</p></div>`, [['Schließen', 'close', 'ghost']]);
 }
 async function doExport() {
   const json = JSON.stringify(S), name = `ascend-backup-${dkey()}.json`;
@@ -727,7 +906,7 @@ async function doExport() {
 }
 function doImport(file) {
   const r = new FileReader();
-  r.onload = () => { try { const d = JSON.parse(r.result); if (!d || d.v !== 1 || !Array.isArray(d.workouts)) throw 0; S = Object.assign(fresh(), d); save(); closeModal(); view = 'status'; render(); toast('Backup geladen'); } catch (e) { toast('Diese Datei ist kein ASCEND-Backup'); } };
+  r.onload = () => { try { const d = JSON.parse(r.result); if (!d || d.v !== 1 || !Array.isArray(d.workouts)) throw 0; const acc = S.acc; S = Object.assign(fresh(), d, {acc}); save(); closeModal(); view = 'status'; render(); toast('Backup geladen'); } catch (e) { toast('Diese Datei ist kein ASCEND-Backup'); } };
   r.readAsText(file);
 }
 
@@ -742,9 +921,10 @@ const H = {
     const d = today(), t = dkey(); if (d.done) return;
     d.done = true; S.streak = S.lastQuestDate === addDays(t, -1) ? S.streak + 1 : 1; S.lastQuestDate = t; S.bestStreak = Math.max(S.bestStreak, S.streak);
     S.cnt.daily++; if (QBY[d.chosen].cat === 'Cardio') S.cnt.cardio++;
+    if ([7, 14, 21, 30, 50, 75, 100].includes(S.streak) || (S.streak > 100 && S.streak % 50 === 0)) feed('streak', `hat eine ${S.streak}-Tage-Streak`);
     save(); gainXP(d.xp + Math.min(50, S.streak * 5), `Daily Quest${S.streak > 1 ? ' · Streak ' + S.streak : ''}`); checkWeekly(); render();
   },
-  penDone: () => { S.penalty.done = true; S.cnt.penalties++; save(); toast('Strafe erledigt. XP sind wieder freigeschaltet'); render(); },
+  penDone: () => { S.penalty.done = true; S.cnt.penalties++; feed('penalty', 'hat die Strafquest erledigt'); save(); toast('Strafe erledigt. XP sind wieder freigeschaltet'); render(); },
   start: b => startWorkout(b.dataset.v),
   setDone: b => { const s = S.active.ex[b.dataset.i].sets[b.dataset.j]; s.done = !s.done; save(); if (s.done) startTimer(S.active.ex[b.dataset.i].kind === 'c' ? 120 : 75); render(); },
   setAdd: b => { const e = S.active.ex[b.dataset.i], l = e.sets[e.sets.length - 1] || {w: 0, r: 8, rir: 2}; e.sets.push({w: l.w, r: l.r, rir: l.rir, done: false}); save(); render(); },
@@ -772,7 +952,29 @@ const H = {
   export: () => doExport(),
   retest: () => { closeModalSilent(); startOb(true); },
   resetAsk: () => sysWin('red', 'Alles zurücksetzen', '<p>Alle Daten auf diesem Gerät werden gelöscht: Level, Trainings, Tests. Das lässt sich nicht rückgängig machen, außer du hast ein Backup.</p>', [['Abbrechen', 'close', 'ghost'], ['Endgültig löschen', 'resetYes', 'red']]),
-  resetYes: () => { S = fresh(); save(); closeModalSilent(); ob = null; view = 'status'; render(); },
+  resetYes: () => { const acc = S.acc; S = fresh(); S.acc = acc; save(); closeModalSilent(); ob = null; view = 'status'; render(); },
+  authMode: b => { authMode = b.dataset.v; render(); },
+  reload: () => location.reload(),
+  board: b => { board = b.dataset.v; render(); },
+  ldRefresh: () => { ladder = null; drawLadder(); loadLadder(); },
+  syncNow: async () => { closeModalSilent(); toast('Sichere…'); const ok = await pushNow(); toast(ok ? 'Gesichert' : 'Sichern fehlgeschlagen: ' + (S.syncErr || 'unbekannt')); },
+  pinAsk: () => sysWin('', 'PIN ändern', `<div class="stack"><label>Neue PIN (6 Ziffern)<input id="pinNew" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label>
+    <label>Neue PIN wiederholen<input id="pinNew2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label><div id="pinErr" class="small" style="color:#ffb3c0"></div></div>`, [['Abbrechen', 'close', 'ghost'], ['Speichern', 'pinSave']]),
+  pinSave: async () => {
+    const p = $('#pinNew').value.trim(), e = $('#pinErr');
+    if (!/^\d{6}$/.test(p)) { e.textContent = 'Die PIN muss genau 6 Ziffern haben'; return; }
+    if ($('#pinNew2').value.trim() !== p) { e.textContent = 'Die beiden PINs stimmen nicht überein'; return; }
+    const {error} = await sb.auth.updateUser({password: p});
+    if (error) { e.textContent = 'Das hat nicht geklappt. Bist du online?'; return; }
+    closeModal(); toast('PIN geändert');
+  },
+  logoutAsk: () => sysWin('', 'Abmelden', '<p>Dein Fortschritt wird gesichert und dann von diesem Handy entfernt. Mit Name und PIN kannst du dich jederzeit wieder anmelden.</p>', [['Abbrechen', 'close', 'ghost'], ['Abmelden', 'logoutYes', 'red']]),
+  logoutYes: async () => {
+    if (!navigator.onLine) { closeModal(); toast('Zum Abmelden brauchst du Internet, sonst geht ungesicherter Fortschritt verloren'); return; }
+    const ok = await pushNow();
+    if (!ok) { closeModal(); toast('Sichern fehlgeschlagen, deshalb nicht abgemeldet'); return; }
+    await sb.auth.signOut(); S = fresh(); writeLocal(); closeModalSilent(); authMode = 'login'; ladder = null; render();
+  },
   obNext: () => { if (!obRead(false)) return; ob.i++; render(); },
   obSkip: () => { obRead(true); ob.i++; render(); },
   obBack: () => { ob.i = Math.max(0, ob.i - 1); render(); },
@@ -804,11 +1006,25 @@ document.addEventListener('change', e => {
   if (e.target.id === 'exSel') { exChart = e.target.value; render(); }
   if (e.target.id === 'importIn' && e.target.files[0]) doImport(e.target.files[0]);
 });
-document.addEventListener('visibilitychange', () => { if (!document.hidden && S.created && !ob) { processDays(); render(); } });
+document.addEventListener('submit', e => { if (e.target.id === 'authForm') { e.preventDefault(); submitAuth(); } });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { if (S.acc) pushNow(); return; }
+  if (S.acc && S.created && !ob && !S.active) { processDays(); render(); }
+});
+window.addEventListener('online', () => { if (S.acc) pushNow(); });
 
 /* ============ Start ============ */
 processDays();
 render();
+(async () => {
+  if (!S.acc || !sb) return;
+  try {
+    const {data: {session}} = await sb.auth.getSession();
+    if (!session) { S.syncErr = 'Bitte neu anmelden'; writeLocal(); return; }
+    if (!S.active && !ob && await pullIfNewer()) { processDays(); render(); toast('Fortschritt aus der Cloud geladen'); }
+    pushNow();
+  } catch (e) {}
+})();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
