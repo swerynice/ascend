@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ASCEND">
+<meta name="theme-color" content="#04060c">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>ASCEND</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: eine schmale Spalte aus leuchtenden "System-Fenstern", feste Tab-Leiste unten. Bewusst nur dunkles Design. */
+:root{
+  --bg:#04060c; --panel:rgba(9,20,40,.82); --panel2:rgba(77,163,255,.07);
+  --line:rgba(77,163,255,.55); --line2:rgba(77,163,255,.22);
+  --glow:#4da3ff; --glow2:#a9d4ff; --fg:#dce9ff; --mute:#7f93b6;
+  --gold:#ffc94d; --red:#ff4d6a; --green:#3ee08f; --ink:#021022;
+  --disp:'Chakra Petch',ui-monospace,'SF Mono',Menlo,monospace;
+  --body:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{min-height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--body);-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(120% 60% at 50% -10%,rgba(77,163,255,.22),transparent 60%),
+  linear-gradient(rgba(77,163,255,.05) 1px,transparent 1px) 0 0/100% 28px;}
+#app{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:14px;
+  padding-top:calc(env(safe-area-inset-top,0px) + 16px);
+  padding-bottom:calc(env(safe-area-inset-bottom,0px) + 104px);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));}
+h1,h2,h3{font-family:var(--disp);margin:0;text-wrap:balance}
+.win{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:14px;
+  box-shadow:0 0 18px rgba(77,163,255,.16),inset 0 0 28px rgba(77,163,255,.06);}
+.win::before,.win::after{content:"";position:absolute;width:10px;height:10px;border:2px solid var(--glow);pointer-events:none}
+.win::before{top:-2px;left:-2px;border-right:0;border-bottom:0}
+.win::after{bottom:-2px;right:-2px;border-left:0;border-top:0}
+.win>h2{margin:-14px -14px 12px;padding:9px 14px;font:600 12px/1 var(--disp);letter-spacing:.2em;text-transform:uppercase;color:var(--glow2);
+  border-bottom:1px solid var(--line2);background:linear-gradient(90deg,rgba(77,163,255,.2),transparent 70%);display:flex;justify-content:space-between;gap:8px}
+.win>h2 small{letter-spacing:.08em;color:var(--mute);font-weight:500}
+.win.red{--line:rgba(255,77,106,.6);--glow:var(--red);--glow2:#ffb3c0;box-shadow:0 0 22px rgba(255,77,106,.25),inset 0 0 28px rgba(255,77,106,.08)}
+.win.red>h2{background:linear-gradient(90deg,rgba(255,77,106,.25),transparent 70%)}
+.win.gold{--line:rgba(255,201,77,.6);--glow:var(--gold);--glow2:#ffe3a3}
+.win.gold>h2{background:linear-gradient(90deg,rgba(255,201,77,.2),transparent 70%)}
+.mute{color:var(--mute)} .small{font-size:13px} .num{font-variant-numeric:tabular-nums}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap} .grow{flex:1;min-width:0}
+.stack{display:flex;flex-direction:column;gap:10px}
+.btn{font:600 13px/1 var(--disp);letter-spacing:.1em;text-transform:uppercase;background:rgba(77,163,255,.1);color:var(--glow2);
+  border:1px solid var(--line);padding:12px 14px;border-radius:3px;cursor:pointer;touch-action:manipulation}
+.btn:active{transform:translateY(1px)}
+.btn.pri{background:var(--glow);color:var(--ink);border-color:var(--glow);box-shadow:0 0 14px rgba(77,163,255,.45)}
+.btn.red{background:rgba(255,77,106,.14);color:#ffc2cc;border-color:rgba(255,77,106,.6)}
+.btn.ghost{background:transparent;border-color:var(--line2);color:var(--mute)}
+.btn.sm{padding:8px 10px;font-size:11px}
+.btn.full{width:100%}
+.btn:disabled{opacity:.4}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--glow2);outline-offset:2px}
+input,select{background:rgba(0,0,0,.4);border:1px solid rgba(77,163,255,.35);color:var(--fg);border-radius:3px;padding:10px;font:16px var(--body);width:100%;min-width:0}
+input::placeholder{color:#4f6182}
+label{font:600 11px var(--disp);letter-spacing:.14em;text-transform:uppercase;color:var(--mute);display:flex;flex-direction:column;gap:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* Status */
+.lvl{display:flex;align-items:flex-end;gap:16px}
+.lvl .big{font:700 64px/0.85 var(--disp);color:#fff;text-shadow:0 0 22px rgba(77,163,255,.8)}
+.lvl .cap{font:600 11px var(--disp);letter-spacing:.24em;color:var(--mute)}
+.rank{margin-left:auto;text-align:center;border:1px solid var(--line);padding:6px 12px 8px;background:var(--panel2)}
+.rank b{display:block;font:700 34px/1 var(--disp);color:var(--glow2);text-shadow:0 0 14px var(--glow)}
+.bar{height:8px;background:rgba(77,163,255,.12);border:1px solid var(--line2);border-radius:1px;overflow:hidden}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,#2a6fe0,var(--glow),#c9e6ff);box-shadow:0 0 10px var(--glow)}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.stat{border:1px solid var(--line2);background:var(--panel2);padding:8px 10px;display:flex;justify-content:space-between;align-items:baseline}
+.stat span{font:600 12px var(--disp);letter-spacing:.16em;color:var(--mute)}
+.stat b{font:700 22px var(--disp);color:#fff;font-variant-numeric:tabular-nums}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:600 11px var(--disp);letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--line2);padding:4px 8px;color:var(--glow2);background:var(--panel2)}
+.chip.gold{color:var(--gold);border-color:rgba(255,201,77,.45)}
+.chip.red{color:#ffb3c0;border-color:rgba(255,77,106,.5)}
+.chip.green{color:var(--green);border-color:rgba(62,224,143,.45)}
+/* Quests */
+.quest{border:1px solid var(--line2);background:var(--panel2);padding:12px;display:flex;gap:12px;align-items:center;cursor:pointer;width:100%;text-align:left;color:var(--fg);font:inherit;border-radius:3px}
+.quest .cat{font:600 10px var(--disp);letter-spacing:.18em;text-transform:uppercase;color:var(--glow)}
+.quest .t{font-weight:600;font-size:16px}
+.quest .xp{margin-left:auto;font:700 14px var(--disp);color:var(--gold);white-space:nowrap}
+.check{width:22px;height:22px;border:1px solid var(--line);flex:none;display:grid;place-items:center;font-weight:700}
+.check.on{background:var(--green);border-color:var(--green);color:var(--ink)}
+.prog{display:flex;flex-direction:column;gap:6px}
+.prog .row{justify-content:space-between}
+/* Training */
+.ex{border:1px solid var(--line2);background:rgba(0,0,0,.2);padding:10px;display:flex;flex-direction:column;gap:8px}
+.ex h3{font-size:16px;font-weight:600}
+.sets{display:grid;grid-template-columns:24px 1fr 1fr 64px 40px;gap:6px;align-items:center}
+.sets .hd{font:600 10px var(--disp);letter-spacing:.12em;color:var(--mute);text-transform:uppercase}
+.sets input,.sets select{padding:8px 6px;text-align:center}
+.setbtn{height:38px;border:1px solid var(--line);background:transparent;color:var(--glow2);border-radius:3px;font-weight:700;cursor:pointer}
+.setbtn.on{background:var(--green);border-color:var(--green);color:var(--ink)}
+.typesel{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.typesel .btn{padding:16px 10px;font-size:14px}
+.typesel .btn.sug{background:var(--glow);color:var(--ink);border-color:var(--glow)}
+/* Fortschritt */
+canvas{width:100%;height:170px;display:block}
+.vol{display:grid;grid-template-columns:88px 1fr 34px;gap:8px;align-items:center;font-size:13px}
+.vbar{position:relative;height:10px;background:rgba(77,163,255,.08);border:1px solid var(--line2)}
+.vbar .zone{position:absolute;top:0;bottom:0;left:40%;width:40%;background:rgba(62,224,143,.13);border-left:1px dashed rgba(62,224,143,.5);border-right:1px dashed rgba(62,224,143,.5)}
+.vbar i{position:absolute;left:0;top:0;bottom:0;background:var(--glow)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal div{aspect-ratio:1;border:1px solid var(--line2);display:grid;place-items:center;font-size:11px;color:var(--mute);position:relative}
+.cal .w{background:rgba(77,163,255,.35);color:#fff;border-color:var(--glow)}
+.cal .q::after{content:"";position:absolute;bottom:3px;width:4px;height:4px;background:var(--gold);border-radius:50%}
+.cal .today{outline:1px solid var(--gold)}
+.cal .hd{border:0;aspect-ratio:auto;font:600 10px var(--disp)}
+.hist{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line2);padding-top:8px}
+/* Wissen */
+.know h3{font-size:15px;color:var(--glow2);margin-bottom:4px}
+.know p{margin:0 0 6px}
+.src{font-size:12px;color:var(--mute)}
+/* Nav, Modal, Toast, Timer */
+#nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(5,1fr);
+  background:rgba(4,8,16,.94);border-top:1px solid var(--line);backdrop-filter:blur(8px);
+  padding:6px max(6px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 6px) max(6px,env(safe-area-inset-left,0px))}
+#nav button{background:none;border:0;color:var(--mute);font:600 10px var(--disp);letter-spacing:.1em;text-transform:uppercase;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;position:relative}
+#nav button svg{width:22px;height:22px}
+#nav button.on{color:var(--glow2)}
+#nav button.on svg{filter:drop-shadow(0 0 6px var(--glow))}
+#nav .dot{position:absolute;top:3px;right:calc(50% - 16px);width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red)}
+#modal{position:fixed;inset:0;z-index:40;background:rgba(2,4,10,.78);display:grid;place-items:center;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+#modal .win{width:100%;max-width:420px;max-height:85vh;overflow:auto;animation:pop .28s ease-out}
+@keyframes pop{from{transform:scale(.92);opacity:.3}to{transform:none;opacity:1}}
+.sysbig{font:700 30px/1.1 var(--disp);text-align:center;color:#fff;text-shadow:0 0 18px var(--glow);letter-spacing:.06em}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 84px);z-index:50;
+  background:rgba(9,20,40,.96);border:1px solid var(--line);padding:10px 14px;font:600 13px var(--disp);letter-spacing:.06em;color:var(--glow2);box-shadow:0 0 16px rgba(77,163,255,.35);max-width:calc(100% - 32px);text-align:center}
+#timer{position:fixed;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 74px);z-index:30;
+  max-width:536px;margin:0 auto;background:rgba(9,20,40,.97);border:1px solid var(--gold);padding:8px 10px;display:flex;align-items:center;gap:8px;box-shadow:0 0 16px rgba(255,201,77,.3)}
+#timer b{font:700 24px var(--disp);color:var(--gold);font-variant-numeric:tabular-nums;min-width:70px}
+#timer.done{border-color:var(--green)} #timer.done b{color:var(--green)}
+.ob-big{font:700 26px/1.15 var(--disp);color:#fff;text-shadow:0 0 16px rgba(77,163,255,.7)}
+.clock{font:700 48px/1 var(--disp);text-align:center;color:#fff;font-variant-numeric:tabular-nums;text-shadow:0 0 18px var(--glow)}
+.steps{display:flex;gap:4px}.steps i{flex:1;height:3px;background:var(--line2)}.steps i.on{background:var(--glow);box-shadow:0 0 6px var(--glow)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<nav id="nav" hidden></nav>
+<div id="timer" hidden></div>
+<div id="modal" hidden></div>
+<div id="toast" hidden></div>
+<script>
+'use strict';
+/* ============ Grundlagen ============ */
+const KEY = 'ascend_v1';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = (n, d = 1) => Number(n).toLocaleString('de-DE', {maximumFractionDigits: d});
+const ri = x => Math.max(1, Math.round(x));
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const num = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : 0; };
+function dkey(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function pdate(k) { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); }
+function addDays(k, n) { const d = pdate(k); d.setDate(d.getDate() + n); return dkey(d); }
+function diffDays(a, b) { return Math.round((pdate(b) - pdate(a)) / 864e5); }
+function weekKey(k) { const d = pdate(k); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return dkey(d); }
+function niceDate(k) { return pdate(k).toLocaleDateString('de-DE', {weekday:'short', day:'2-digit', month:'2-digit'}); }
+const e1rm = (w, r) => r <= 0 || w <= 0 ? 0 : (r === 1 ? w : w * (1 + r / 30)); // Epley-Formel
+const round25 = x => Math.round(x / 2.5) * 2.5;
+
+function fresh() {
+  return {v:1, name:'', created:null, xp:0, streak:0, bestStreak:0, lastQuestDate:null, lastProcessed:null,
+    days:{}, questHistory:{}, penalty:null, workouts:[], active:null, bw:[], prs:{}, rot:0,
+    titles:[], dungeons:[], weekly:{}, tests:[], peak:null, cnt:{daily:0, cardio:0, penalties:0}};
+}
+let S;
+try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fresh(); }
+S = Object.assign(fresh(), S);
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Speichern fehlgeschlagen'); } }
+
+/* ============ Testwerte & Werte ============ */
+const DEF = {bw:80, waist:0, bench:{w:60,r:5}, squat:{w:70,r:5}, dead:{w:80,r:5}, ohp:{w:35,r:5}, push:15, pull:3, plank:60, run:1800};
+const LIFT = {bench:'Bankdrücken', squat:'Kniebeugen', dead:'Kreuzheben', ohp:'Schulterdrücken'};
+function T() { const t = S.tests[S.tests.length - 1] || {}; return Object.assign({}, DEF, t); }
+function curBW() { return S.bw.length ? S.bw[S.bw.length - 1].kg : T().bw; }
+const fitF = () => clamp(T().push / 20, 0.6, 1.6);
+const diff = () => 1 + Math.min(0.5, (levelInfo(S.xp).lvl - 1) * 0.02);
+
+function levelInfo(xp) { let lvl = 1, need = 100, rest = xp; while (rest >= need) { rest -= need; lvl++; need = 100 + 40 * (lvl - 1); } return {lvl, rest, need}; }
+function stats() {
+  const t = T(), bw = curBW() || 80, p = n => S.prs[n] || 0;
+  const rel = (p('Bankdrücken') + p('Kniebeugen') + p('Kreuzheben')) / bw;
+  const sets = S.workouts.reduce((a, w) => a + w.ex.reduce((b, e) => b + e.sets.length, 0), 0);
+  return {
+    STR: Math.round(rel * 8) + Math.floor(sets / 50),
+    VIT: Math.round(t.plank / 10 + t.push / 3) + Math.floor(S.cnt.daily / 5),
+    AGI: Math.round(t.run / 150) + Math.floor(S.cnt.cardio / 3),
+    DIS: S.streak + Math.floor(S.workouts.length / 4),
+  };
+}
+const RANKS = [['E',0],['D',60],['C',80],['B',100],['A',125],['S',155]];
+function rankOf(st) { const sum = st.STR + st.VIT + st.AGI + st.DIS; let r = 'E', next = null;
+  for (let i = 0; i < RANKS.length; i++) { if (sum >= RANKS[i][1]) { r = RANKS[i][0]; next = RANKS[i + 1] || null; } }
+  return {r, sum, next}; }
+
+/* ============ Quests ============ */
+const QUESTS = [
+  {id:'q_push', cat:'Kraft', xp:50, t:m => `4 × ${ri(T().push*0.6*m)} Liegestütze`},
+  {id:'q_squat', cat:'Kraft', xp:50, t:m => `5 × ${ri(20*m)} Kniebeugen ohne Gewicht`},
+  {id:'q_pull', cat:'Kraft', xp:55, t:m => T().pull >= 2 ? `${ri(T().pull*3*m)} Klimmzüge gesamt, beliebig aufgeteilt` : `5 × ${ri(4*m)} negative Klimmzüge (5 s ablassen)`},
+  {id:'q_lunge', cat:'Kraft', xp:50, t:m => `3 × ${ri(12*m)} Ausfallschritte pro Bein`},
+  {id:'q_plank', cat:'Core', xp:45, t:m => `3 × ${ri(T().plank*0.75*m)} s Plank`},
+  {id:'q_legs', cat:'Core', xp:45, t:m => `3 × ${ri(12*m)} Beinheben`},
+  {id:'q_hang', cat:'Core', xp:45, t:m => `3 × ${ri(30*m)} s Dead Hang`},
+  {id:'q_run', cat:'Cardio', xp:60, t:m => `${fmt(Math.max(1, Math.round(T().run/1000*1.1*m*2)/2))} km am Stück laufen`},
+  {id:'q_int', cat:'Cardio', xp:60, t:m => `${ri(6*m)} × 30 s Sprint / 90 s Gehen`},
+  {id:'q_incl', cat:'Cardio', xp:50, t:m => `${ri(25*m)} min Steigungsgehen (10–12 %)`},
+  {id:'q_bike', cat:'Cardio', xp:50, t:m => `${ri(20*m)} min Ergometer, zügig`},
+  {id:'q_rope', cat:'Cardio', xp:50, t:m => `${ri(8*m)} min Seilspringen`},
+  {id:'q_burpee', cat:'Cardio', xp:55, t:m => `${ri(30*fitF()*m)} Burpees`},
+  {id:'q_steps', cat:'Alltag', xp:40, t:m => `${(Math.round(9000*m/500)*500).toLocaleString('de-DE')} Schritte`},
+  {id:'q_mob', cat:'Mobility', xp:40, t:() => `15 min Mobility: Hüfte, Schultern, Brustwirbelsäule`},
+  {id:'q_protein', cat:'Ernährung', xp:40, t:() => `${Math.round(curBW()*1.8/5)*5} g Eiweiß heute essen`},
+  {id:'q_water', cat:'Ernährung', xp:35, t:() => `${fmt(Math.round(curBW()*0.035*2)/2)} l Wasser trinken`},
+];
+const QBY = Object.fromEntries(QUESTS.map(q => [q.id, q]));
+const PENALTIES = [
+  f => `3 × ${ri(T().plank*f)} s Plank`,
+  f => `${ri(40*fitF()*f)} Burpees`,
+  f => `3 × ${ri((45 + T().plank*0.25)*f)} s Wandsitzen`,
+  f => `4 × ${ri(30*fitF()*f)} Mountain Climbers pro Seite`,
+  f => `${ri(T().push*2.5*f)} Liegestütze gesamt`,
+];
+function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function makeOffers(t) {
+  const ok = QUESTS.filter(q => !(S.questHistory[q.id] && diffDays(S.questHistory[q.id], t) <= 2));
+  const pool = shuffle(ok.length >= 3 ? ok : QUESTS), out = [], cats = new Set();
+  for (const q of pool) if (out.length < 3 && !cats.has(q.cat)) { out.push(q.id); cats.add(q.cat); }
+  for (const q of pool) if (out.length < 3 && !out.includes(q.id)) out.push(q.id);
+  return out;
+}
+function today() {
+  const t = dkey();
+  if (!S.days[t]) { S.days[t] = {offers: makeOffers(t), chosen: null, text: '', xp: 0, done: false}; save(); }
+  return S.days[t];
+}
+function makePenalty(t, missed) {
+  const f = missed > 1 ? 1.25 : 1, picks = shuffle(PENALTIES).slice(0, 2).map(fn => fn(f));
+  return {date: t, items: picks, done: false, missed};
+}
+function processDays() {
+  const t = dkey();
+  if (!S.created) return;
+  if (!S.lastProcessed) { S.lastProcessed = t; save(); return; }
+  if (S.lastProcessed >= t) return;
+  let missed = 0;
+  for (let d = S.lastProcessed; d < t; d = addDays(d, 1)) {
+    if (d <= S.created) continue;              // Am Starttag gibt es keine Strafe
+    if (!(S.days[d] && S.days[d].done)) missed++;
+  }
+  S.lastProcessed = t;
+  if (missed > 0) {
+    S.streak = 0;
+    if (!S.penalty || S.penalty.done) S.penalty = makePenalty(t, missed);
+    save();
+    queue(() => sysWin('red', 'Warnung', `<p class="sysbig">STRAFQUEST</p>
+      <p>Du hast ${missed === 1 ? 'eine Daily Quest' : missed + ' Daily Quests'} verpasst. Deine Streak ist zurückgesetzt.</p>
+      <p>Bis die Strafquest erledigt ist, bekommst du <b>keine XP</b>.</p>`, [['Verstanden', 'close', 'red']]));
+  } else save();
+}
+const penaltyOpen = () => S.penalty && !S.penalty.done;
+
+/* ============ XP, Popups, Toast ============ */
+let popQ = [], popOpen = false;
+function queue(fn) { popQ.push(fn); if (!popOpen) nextPop(); }
+function nextPop() { const fn = popQ.shift(); if (fn) { popOpen = true; fn(); } else popOpen = false; }
+function sysWin(kind, title, body, buttons) {
+  const m = $('#modal');
+  m.innerHTML = `<div class="win ${kind}" role="dialog" aria-modal="true"><h2><span>◆ ${esc(title)}</span></h2>
+    <div class="stack">${body}<div class="row">${buttons.map(([l, a, c]) => `<button class="btn ${c || 'pri'} grow" data-a="${a}">${esc(l)}</button>`).join('')}</div></div></div>`;
+  m.hidden = false;
+  const b = m.querySelector('button'); if (b) b.focus();
+}
+function closeModal() { $('#modal').hidden = true; $('#modal').innerHTML = ''; nextPop(); }
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
+function gainXP(n, why, force) {
+  if (penaltyOpen() && !force) { toast('XP gesperrt: Erst die Strafquest erledigen'); return false; }
+  const before = levelInfo(S.xp).lvl;
+  S.xp += n; save(); toast(`+${n} XP · ${why}`);
+  const after = levelInfo(S.xp).lvl;
+  if (after > before) queue(() => sysWin('gold', 'System', `<p class="sysbig">LEVEL UP</p><p style="text-align:center" class="num">Level ${before} → <b>${after}</b></p><p class="small mute" style="text-align:center">Die Quests werden etwas härter.</p>`, [['Weiter', 'close']]));
+  return true;
+}
+function checkRank() {
+  const ra = rankOf(stats()).r, order = 'EDCBAS', rb = S.rank;
+  if (rb && order.indexOf(ra) > order.indexOf(rb)) queue(() => sysWin('gold', 'Rang-Aufstieg', `<p class="sysbig">RANG ${ra}</p><p style="text-align:center">Du bist von Rang ${rb} auf Rang ${ra} aufgestiegen.</p>`, [['Weiter', 'close']]));
+  if (rb !== ra) { S.rank = ra; save(); }
+}
+function checkWeekly() {
+  const t = dkey(), wk = weekKey(t), got = S.weekly[wk] || (S.weekly[wk] = []);
+  for (const w of weeklyList()) {
+    if (w.cur >= w.goal && !got.includes(w.id)) { if (gainXP(w.xp, 'Wochenquest: ' + w.name)) got.push(w.id); }
+  }
+  save();
+}
+function weeklyList() {
+  const t = dkey(), wk = weekKey(t);
+  const wo = S.workouts.filter(w => weekKey(w.date) === wk).length;
+  const daily = Object.entries(S.days).filter(([d, v]) => weekKey(d) === wk && v.done).length;
+  const weigh = S.bw.filter(b => weekKey(b.date) === wk).length;
+  return [
+    {id:'w_train', name:'4 Trainings', cur:wo, goal:4, xp:100},
+    {id:'w_daily', name:'5 Daily Quests', cur:daily, goal:5, xp:80},
+    {id:'w_weigh', name:'1× wiegen', cur:weigh, goal:1, xp:30},
+    {id:'w_extra', name:'Überstunden: 5. Training', cur:wo, goal:5, xp:60},
+  ];
+}
+
+/* ============ Dungeons ============ */
+function makeDungeons() {
+  const t = T(), out = [], keep = S.dungeons.filter(d => d.done);
+  const lift = (k, name) => { const base = e1rm(t[k].w, t[k].r); if (base > 0) out.push({id:'d_'+k+'_'+Date.now(), name, kind:'lift', ex:LIFT[k], target:round25(base*1.1), unit:'kg geschätztes Max', done:false}); };
+  lift('bench', 'Eiserne Brust'); lift('squat', 'Fundament'); lift('dead', 'Erdbeben'); lift('ohp', 'Himmelsstoß');
+  out.push({id:'d_pull_'+Date.now(), name:'Aufstieg', kind:'test', f:'pull', target:t.pull + 3, unit:'Klimmzüge am Stück', done:false});
+  out.push({id:'d_plank_'+Date.now(), name:'Unerschütterlich', kind:'test', f:'plank', target:t.plank + 30, unit:'s Plank', done:false});
+  out.push({id:'d_run_'+Date.now(), name:'Sturmläufer', kind:'test', f:'run', target:t.run + 200, unit:'m in 12 min', done:false});
+  if (S.peak && S.peak < curBW()) out.push({id:'d_bw', name:'Alte Form', kind:'bw', target:S.peak, unit:'kg Körpergewicht', done:false});
+  S.dungeons = keep.concat(out);
+}
+function dungeonCur(d) {
+  if (d.kind === 'lift') return S.prs[d.ex] || 0;
+  if (d.kind === 'test') return T()[d.f];
+  if (d.kind === 'bw') return curBW();
+  return 0;
+}
+function checkDungeons() {
+  for (const d of S.dungeons) {
+    if (d.done) continue;
+    const c = dungeonCur(d), ok = d.kind === 'bw' ? c <= d.target : c >= d.target;
+    if (ok) {
+      d.done = true; d.doneDate = dkey(); if (!S.titles.includes(d.name)) S.titles.push(d.name);
+      gainXP(200, 'Dungeon: ' + d.name, true);
+      queue(() => sysWin('gold', 'Dungeon geschafft', `<p class="sysbig">${esc(d.name.toUpperCase())}</p><p style="text-align:center">Neuer Titel freigeschaltet: <b>${esc(d.name)}</b></p>`, [['Weiter', 'close']]));
+    }
+  }
+  save();
+}
+
+/* ============ Training ============ */
+const TYPES = ['Push', 'Pull', 'Legs', 'Arme'];
+const TPL = {
+  Push: [['Bankdrücken','Brust','c'],['Schrägbankdrücken KH','Brust','c'],['Schulterdrücken','Schultern','c'],['Seitheben','Schultern','i'],['Trizepsdrücken am Kabel','Trizeps','i'],['Dips','Trizeps','c']],
+  Pull: [['Klimmzüge','Rücken','c'],['Langhantelrudern','Rücken','c'],['Latziehen','Rücken','c'],['Kreuzheben','Rücken','c'],['Face Pulls','Schultern','i'],['Hammer Curls','Bizeps','i']],
+  Legs: [['Kniebeugen','Quads','c'],['Rumänisches Kreuzheben','Beinbeuger','c'],['Beinpresse','Quads','c'],['Hip Thrust','Gesäß','c'],['Beinbeuger Maschine','Beinbeuger','i'],['Wadenheben','Waden','i']],
+  Arme: [['SZ-Curls','Bizeps','i'],['Enges Bankdrücken','Trizeps','c'],['Schrägbank-Curls','Bizeps','i'],['Überkopf-Trizeps am Kabel','Trizeps','i'],['Hammer Curls','Bizeps','i'],['Unterarm-Curls','Unterarme','i']],
+};
+const MUSCLES = ['Brust','Rücken','Schultern','Bizeps','Trizeps','Quads','Beinbeuger','Gesäß','Waden'];
+const BW_EX = ['Klimmzüge', 'Dips'];
+const effW = (name, w) => BW_EX.includes(name) ? curBW() + w : w;
+function lastSets(name) {
+  for (let i = S.workouts.length - 1; i >= 0; i--) { const e = S.workouts[i].ex.find(x => x.name === name); if (e && e.sets.length) return {date:S.workouts[i].date, sets:e.sets}; }
+  return null;
+}
+function suggestion(name, kind) {
+  const [lo, hi] = kind === 'c' ? [6, 10] : [10, 15];
+  const last = lastSets(name);
+  if (!last) {
+    const tk = Object.keys(LIFT).find(k => LIFT[k] === name);
+    if (tk) { const t = T()[tk]; return {w: round25(e1rm(t.w, t.r) * 0.72), r: lo + 2, lo, hi, note:'aus deinem Test'}; }
+    return {w: 0, r: lo, lo, hi, note:'erstes Mal: Gewicht wählen, das 1–3 Wdh. vor dem Versagen endet'};
+  }
+  const top = Math.max(...last.sets.map(s => s.w)), allTop = last.sets.filter(s => s.w === top).every(s => s.r >= hi);
+  if (allTop) { const inc = kind === 'c' ? 2.5 : 1; return {w: top + inc, r: lo, lo, hi, up:true, note:`letztes Mal ${hi}+ Wdh. geschafft, also mehr Gewicht`}; }
+  const best = Math.max(...last.sets.filter(s => s.w === top).map(s => s.r));
+  return {w: top, r: Math.min(hi, best + 1), lo, hi, note:`letztes Mal ${fmt(top)} kg × ${best}, jetzt 1 Wdh. mehr`};
+}
+function newEx(name, muscle, kind) {
+  const sg = suggestion(name, kind);
+  return {name, muscle, kind, sets: [0,1,2].map(() => ({w: sg.w, r: sg.r, rir: 2, done: false}))};
+}
+function startWorkout(type) {
+  S.active = {type, date: dkey(), start: Date.now(), ex: TPL[type].slice(0, 5).map(([n, m, k]) => newEx(n, m, k))};
+  save(); render();
+}
+function finishWorkout() {
+  const a = S.active; if (!a) return;
+  const ex = a.ex.map(e => ({name: e.name, muscle: e.muscle, kind: e.kind, sets: e.sets.filter(s => s.done).map(s => ({w: num(s.w), r: num(s.r), rir: num(s.rir)}))})).filter(e => e.sets.length);
+  if (!ex.length) { sysWin('', 'Training', '<p>Du hast noch keinen Satz abgehakt. Tippe bei jedem fertigen Satz auf ✓.</p>', [['OK', 'close']]); return; }
+  const prs = [];
+  for (const e of ex) {
+    const best = Math.max(...e.sets.map(s => e1rm(effW(e.name, s.w), s.r)));
+    if (best > (S.prs[e.name] || 0) + 0.01) { if (S.prs[e.name]) prs.push([e.name, best]); S.prs[e.name] = Math.round(best * 10) / 10; }
+  }
+  S.workouts.push({id: Date.now(), date: a.date, type: a.type, min: Math.round((Date.now() - a.start) / 60000), ex});
+  S.rot = (TYPES.indexOf(a.type) + 1) % 4; S.active = null; stopTimer(); save();
+  const nSets = ex.reduce((s, e) => s + e.sets.length, 0);
+  gainXP(50 + nSets * 4 + prs.length * 30, `${a.type}-Training`);
+  for (const [n, v] of prs) queue(() => sysWin('gold', 'Neuer Rekord', `<p class="sysbig">PR</p><p style="text-align:center"><b>${esc(n)}</b><br><span class="num">${fmt(v)} kg</span> geschätztes Maximum</p>`, [['Stark', 'close']]));
+  checkDungeons(); checkWeekly(); view = 'status'; render();
+}
+
+/* ============ Pausen-Timer ============ */
+let timerEnd = 0, timerIv = null;
+function startTimer(sec) { timerEnd = Date.now() + sec * 1000; clearInterval(timerIv); timerIv = setInterval(drawTimer, 250); drawTimer(); }
+function stopTimer() { clearInterval(timerIv); timerIv = null; $('#timer').hidden = true; }
+function drawTimer() {
+  const el = $('#timer'), left = Math.ceil((timerEnd - Date.now()) / 1000);
+  el.hidden = false; el.classList.toggle('done', left <= 0);
+  const s = Math.max(0, left);
+  el.innerHTML = `<b>${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}</b><span class="grow small mute">${left <= 0 ? 'Pause vorbei. Nächster Satz!' : 'Satzpause'}</span>
+    <button class="btn sm ghost" data-a="tmr" data-v="-15">−15</button><button class="btn sm ghost" data-a="tmr" data-v="15">+15</button><button class="btn sm ghost" data-a="tmrx" aria-label="Timer schließen">✕</button>`;
+  if (left <= -20) stopTimer();
+}
+
+/* ============ Ansichten ============ */
+let view = 'status', exChart = 'Bankdrücken';
+const ICONS = {
+  status:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 8v8M8 12h8"/></svg>',
+  quests:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h11l3 3v15H5z"/><path d="M9 10l2 2 4-4M9 16h6"/></svg>',
+  training:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12"/></svg>',
+  progress:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 20h18M5 16l4-5 4 3 6-8"/></svg>',
+  wissen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 012-2h13v16H6a2 2 0 00-2 2z"/><path d="M4 19V5M9 8h6"/></svg>',
+};
+const LABELS = {status:'Status', quests:'Quests', training:'Training', progress:'Fortschritt', wissen:'Wissen'};
+function renderNav() {
+  const n = $('#nav'); n.hidden = false;
+  const qDot = penaltyOpen() || !(S.days[dkey()] && S.days[dkey()].done);
+  n.innerHTML = Object.keys(LABELS).map(k => `<button data-a="nav" data-v="${k}" class="${view === k ? 'on' : ''}" aria-label="${LABELS[k]}">${ICONS[k]}${LABELS[k]}${k === 'quests' && qDot ? '<span class="dot"></span>' : ''}${k === 'training' && S.active ? '<span class="dot" style="background:var(--green);box-shadow:0 0 8px var(--green)"></span>' : ''}</button>`).join('');
+}
+function render() {
+  if (!S.created || ob) { renderOb(); return; }
+  today(); checkRank();
+  const app = $('#app');
+  app.innerHTML = ({status: vStatus, quests: vQuests, training: vTraining, progress: vProgress, wissen: vWissen})[view]();
+  renderNav();
+  if (view === 'progress') requestAnimationFrame(drawCharts);
+}
+
+function vStatus() {
+  const li = levelInfo(S.xp), st = stats(), rk = rankOf(st), d = today(), t = T();
+  const retest = S.tests.length && diffDays(S.tests[S.tests.length - 1].date, dkey()) >= 42;
+  const next = TYPES[S.rot];
+  return `
+  <div class="row" style="justify-content:space-between"><h1 style="font-size:22px;letter-spacing:.24em">ASCEND</h1><button class="btn sm ghost" data-a="settings">System</button></div>
+  <section class="win"><h2><span>◆ Status</span><small>${esc(S.name || 'Spieler')}</small></h2>
+    <div class="stack">
+      <div class="lvl"><div><div class="cap">LEVEL</div><div class="big num">${li.lvl}</div></div>
+        <div class="grow small mute">${S.titles.length ? 'Titel: <span style="color:var(--gold)">' + esc(S.titles[S.titles.length - 1]) + '</span>' : 'Noch kein Titel'}<br>Streak: <b style="color:#fff">${S.streak}</b> ${S.streak === 1 ? 'Tag' : 'Tage'}</div>
+        <div class="rank"><span class="cap">RANG</span><b>${rk.r}</b></div></div>
+      <div><div class="row small mute" style="justify-content:space-between"><span>XP</span><span class="num">${li.rest} / ${li.need}</span></div><div class="bar"><i style="width:${li.rest / li.need * 100}%"></i></div></div>
+      <div class="stats">${Object.entries(st).map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+      <div class="small mute">${rk.next ? `Noch ${rk.next[1] - rk.sum} Wertepunkte bis Rang ${rk.next[0]}.` : 'Höchster Rang erreicht.'} Werte steigen durch Training, Quests und bessere Testergebnisse.</div>
+    </div></section>
+  ${penaltyOpen() ? `<section class="win red"><h2><span>◆ Strafquest offen</span></h2><p style="margin:0 0 10px">${S.penalty.items.map(esc).join(' + ')}</p><button class="btn red full" data-a="nav" data-v="quests">Zur Strafquest</button></section>` : ''}
+  ${retest ? `<section class="win gold"><h2><span>◆ Rang-Prüfung fällig</span></h2><p style="margin:0 0 10px">Dein letzter Test ist über 6 Wochen her. Teste dich neu, damit die Quests zu deiner aktuellen Form passen. Belohnung: 150 XP.</p><button class="btn pri full" data-a="retest">Prüfung starten</button></section>` : ''}
+  <section class="win"><h2><span>◆ Heute</span><small>${niceDate(dkey())}</small></h2>
+    <div class="stack">
+      <button class="quest" data-a="nav" data-v="quests"><div class="check ${d.done ? 'on' : ''}">${d.done ? '✓' : ''}</div><div class="grow"><div class="cat">Daily Quest</div><div class="t">${d.chosen ? esc(d.text) : 'Noch keine Quest gewählt'}</div></div></button>
+      <button class="quest" data-a="nav" data-v="training"><div class="check">${S.active ? '▶' : ''}</div><div class="grow"><div class="cat">Training</div><div class="t">${S.active ? S.active.type + ' läuft' : 'Nächster Tag: ' + next}</div></div></button>
+    </div></section>`;
+}
+
+function vQuests() {
+  const d = today(), m = diff();
+  let pen = '';
+  if (penaltyOpen()) pen = `<section class="win red"><h2><span>◆ Strafquest</span><small>Pflicht</small></h2><div class="stack">
+    <p style="margin:0">Du hast ${S.penalty.missed === 1 ? 'eine Daily Quest' : S.penalty.missed + ' Daily Quests'} verpasst. Erledige alles, um XP wieder freizuschalten:</p>
+    ${S.penalty.items.map(i => `<div class="quest" style="cursor:default"><div class="check"></div><div class="t">${esc(i)}</div></div>`).join('')}
+    <button class="btn red full" data-a="penDone">Strafe erledigt</button></div></section>`;
+  let daily;
+  if (!d.chosen) daily = `<p class="small mute" style="margin:0">Wähle eine Quest. Die Wahl ist bindend, und die gewählte Quest kommt die nächsten 2 Tage nicht wieder.</p>
+    ${d.offers.map(id => { const q = QBY[id]; return `<button class="quest" data-a="choose" data-v="${id}"><div class="grow"><div class="cat">${q.cat}</div><div class="t">${esc(q.t(m))}</div></div><div class="xp">+${q.xp} XP</div></button>`; }).join('')}`;
+  else daily = `<div class="quest" style="cursor:default"><div class="check ${d.done ? 'on' : ''}">${d.done ? '✓' : ''}</div><div class="grow"><div class="cat">${QBY[d.chosen].cat}</div><div class="t">${esc(d.text)}</div></div><div class="xp">+${d.xp} XP</div></div>
+    ${d.done ? '<p class="small mute" style="margin:0">Erledigt. Morgen gibt es neue Quests.</p>' : `<button class="btn pri full" data-a="questDone">Quest erledigt</button>`}`;
+  const wk = S.weekly[weekKey(dkey())] || [];
+  return `${pen}
+  <section class="win"><h2><span>◆ Daily Quest</span><small>${niceDate(dkey())}</small></h2><div class="stack">${daily}</div></section>
+  <section class="win"><h2><span>◆ Wochenquests</span><small>ab Montag</small></h2><div class="stack">
+    ${weeklyList().map(w => `<div class="prog"><div class="row"><span>${w.name}</span><span class="num ${wk.includes(w.id) ? '' : 'mute'}" style="${wk.includes(w.id) ? 'color:var(--green)' : ''}">${wk.includes(w.id) ? '✓ +' + w.xp + ' XP' : Math.min(w.cur, w.goal) + ' / ' + w.goal + ' · +' + w.xp + ' XP'}</span></div><div class="bar"><i style="width:${Math.min(1, w.cur / w.goal) * 100}%"></i></div></div>`).join('')}
+  </div></section>
+  <section class="win gold"><h2><span>◆ Dungeons</span><small>+200 XP · Titel</small></h2><div class="stack">
+    ${S.dungeons.filter(x => !x.done).map(x => { const c = dungeonCur(x), p = x.kind === 'bw' ? clamp((T().bw - c) / Math.max(0.1, T().bw - x.target), 0, 1) : clamp(c / x.target, 0, 1);
+      return `<div class="prog"><div class="row"><b>${esc(x.name)}</b><span class="small mute num">${fmt(c)} → ${fmt(x.target)} ${x.unit}</span></div><div class="small mute">${x.kind === 'lift' ? esc(x.ex) + ': neues geschätztes Maximum im Training' : x.kind === 'test' ? 'Wird bei der nächsten Rang-Prüfung gemessen' : 'Dein Zielgewicht erreichen'}</div><div class="bar"><i style="width:${p * 100}%;background:var(--gold);box-shadow:0 0 10px var(--gold)"></i></div></div>`; }).join('') || '<p class="mute" style="margin:0">Alle Dungeons geschafft. Mach eine Rang-Prüfung für neue.</p>'}
+    ${S.titles.length ? `<div class="chips">${S.titles.map(t => `<span class="chip gold">${esc(t)}</span>`).join('')}</div>` : ''}
+  </div></section>`;
+}
+
+function vTraining() {
+  const a = S.active;
+  if (!a) {
+    const next = TYPES[S.rot];
+    const hist = S.workouts.slice(-3).reverse();
+    return `<section class="win"><h2><span>◆ Training starten</span></h2><div class="stack">
+      <p class="small mute" style="margin:0">Deine Rotation: Push → Pull → Legs → Arme. Vorgeschlagen ist <b style="color:#fff">${next}</b>.</p>
+      <div class="typesel">${TYPES.map(t => `<button class="btn ${t === next ? 'sug' : ''}" data-a="start" data-v="${t}">${t}</button>`).join('')}</div></div></section>
+      <section class="win"><h2><span>◆ Letzte Trainings</span></h2><div class="stack">${hist.length ? hist.map(w => `<div class="hist"><span><b>${w.type}</b> <span class="mute small">${niceDate(w.date)}</span></span><span class="small mute num">${w.ex.reduce((s, e) => s + e.sets.length, 0)} Sätze · ${w.min} min</span></div>`).join('') : '<p class="mute" style="margin:0">Noch kein Training geloggt.</p>'}</div></section>`;
+  }
+  const doneSets = a.ex.reduce((s, e) => s + e.sets.filter(x => x.done).length, 0);
+  return `<section class="win"><h2><span>◆ ${a.type}-Training</span><small class="num">${doneSets} Sätze</small></h2><div class="stack">
+    <p class="small mute" style="margin:0">Trag Gewicht, Wiederholungen und RIR ein (Wiederholungen, die noch gegangen wären) und tippe ✓. Dann startet die Satzpause.</p>
+    ${a.ex.map((e, i) => { const sg = suggestion(e.name, e.kind);
+      return `<div class="ex"><div class="row"><h3 class="grow">${esc(e.name)}</h3><span class="chip">${esc(e.muscle)}</span><button class="btn sm ghost" data-a="exDel" data-i="${i}" aria-label="${esc(e.name)} entfernen">✕</button></div>
+      <div class="small ${sg.up ? '' : 'mute'}" style="${sg.up ? 'color:var(--green)' : ''}">Vorschlag: ${sg.w ? fmt(sg.w) + ' kg' : '–'} × ${sg.lo}–${sg.hi} · ${esc(sg.note)}</div>
+      <div class="sets"><span class="hd">#</span><span class="hd">${BW_EX.includes(e.name) ? '+kg' : 'kg'}</span><span class="hd">Wdh.</span><span class="hd">RIR</span><span></span>
+      ${e.sets.map((s, j) => `<span class="mute num">${j + 1}</span>
+        <input id="w-${i}-${j}" inputmode="decimal" data-f="w" data-i="${i}" data-j="${j}" value="${s.w}" aria-label="Gewicht Satz ${j + 1}">
+        <input id="r-${i}-${j}" inputmode="numeric" data-f="r" data-i="${i}" data-j="${j}" value="${s.r}" aria-label="Wiederholungen Satz ${j + 1}">
+        <select id="q-${i}-${j}" data-f="rir" data-i="${i}" data-j="${j}" aria-label="RIR Satz ${j + 1}">${[0,1,2,3,4,5].map(v => `<option ${num(s.rir) === v ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        <button class="setbtn ${s.done ? 'on' : ''}" data-a="setDone" data-i="${i}" data-j="${j}" aria-label="Satz ${j + 1} fertig">✓</button>`).join('')}</div>
+      <div class="row"><button class="btn sm ghost" data-a="setAdd" data-i="${i}">+ Satz</button>${e.sets.length > 1 ? `<button class="btn sm ghost" data-a="setDel" data-i="${i}">− Satz</button>` : ''}</div></div>`; }).join('')}
+    <button class="btn full" data-a="exAdd">+ Übung hinzufügen</button>
+    <div class="row"><button class="btn ghost grow" data-a="wCancel">Abbrechen</button><button class="btn pri grow" data-a="wFinish">Training beenden</button></div>
+  </div></section>`;
+}
+
+function volume() {
+  const from = addDays(dkey(), -6), v = Object.fromEntries(MUSCLES.map(m => [m, 0]));
+  for (const w of S.workouts) if (w.date >= from) for (const e of w.ex) if (v[e.muscle] !== undefined) v[e.muscle] += e.sets.filter(s => s.rir <= 4).length;
+  return v;
+}
+function bwRate() {
+  if (S.bw.length < 2) return null;
+  const last = S.bw[S.bw.length - 1];
+  let ref = null; for (let i = S.bw.length - 2; i >= 0; i--) { if (diffDays(S.bw[i].date, last.date) >= 6) { ref = S.bw[i]; break; } }
+  if (!ref) return null;
+  const days = diffDays(ref.date, last.date);
+  return (ref.kg - last.kg) / ref.kg * 100 / days * 7; // % Abnahme pro Woche
+}
+function vProgress() {
+  const vol = volume(), rate = bwRate(), names = Object.keys(S.prs);
+  if (!names.includes(exChart) && names.length) exChart = names[0];
+  let rateTxt = '<span class="mute">Wiege dich mindestens zweimal im Abstand von einer Woche, dann siehst du hier dein Tempo.</span>';
+  if (rate !== null) {
+    const r = fmt(rate, 2);
+    if (rate > 1) rateTxt = `<span class="chip red">${r} %/Woche</span> Zu schnell. Iss etwas mehr, sonst verlierst du Muskeln.`;
+    else if (rate >= 0.5) rateTxt = `<span class="chip green">${r} %/Woche</span> Ideales Tempo zum Abnehmen mit Muskelerhalt.`;
+    else if (rate > 0) rateTxt = `<span class="chip">${r} %/Woche</span> Langsam, aber okay. Etwas mehr Defizit wäre möglich.`;
+    else rateTxt = `<span class="chip">${r} %/Woche</span> Gerade keine Abnahme.`;
+  }
+  const start = addDays(weekKey(dkey()), -28), cells = [];
+  for (let i = 0; i < 35; i++) { const d = addDays(start, i); const w = S.workouts.some(x => x.date === d), q = S.days[d] && S.days[d].done;
+    cells.push(`<div class="${w ? 'w' : ''} ${q ? 'q' : ''} ${d === dkey() ? 'today' : ''}" title="${d}">${pdate(d).getDate()}</div>`); }
+  return `
+  <section class="win"><h2><span>◆ Körpergewicht</span><small class="num">${fmt(curBW())} kg${S.peak ? ' · Ziel ' + fmt(S.peak) : ''}</small></h2><div class="stack">
+    <div class="row"><input id="bwIn" class="grow" inputmode="decimal" placeholder="Gewicht heute in kg" style="flex:1"><button class="btn pri" data-a="bwAdd">Eintragen</button></div>
+    <canvas id="cBW" aria-label="Verlauf Körpergewicht"></canvas>
+    <div class="small">${rateTxt}</div>
+    <div class="row"><input id="peakIn" inputmode="decimal" placeholder="Zielgewicht (dein Peak) in kg" value="${S.peak || ''}" style="flex:1"><button class="btn sm" data-a="peakSet">Ziel speichern</button></div>
+  </div></section>
+  <section class="win"><h2><span>◆ Volumen</span><small>letzte 7 Tage</small></h2><div class="stack">
+    <p class="small mute" style="margin:0">Harte Sätze pro Muskel. Grün markiert ist der Bereich mit dem besten Muskelaufbau: 10–20 Sätze pro Woche.</p>
+    ${MUSCLES.map(m => `<div class="vol"><span>${m}</span><div class="vbar"><div class="zone"></div><i style="width:${Math.min(100, vol[m] / 25 * 100)}%;${vol[m] >= 10 && vol[m] <= 20 ? 'background:var(--green)' : ''}"></i></div><span class="num" style="text-align:right">${vol[m]}</span></div>`).join('')}
+  </div></section>
+  <section class="win"><h2><span>◆ Kraft</span><small>geschätztes Max</small></h2><div class="stack">
+    ${names.length ? `<select id="exSel" data-a="exChart">${names.map(n => `<option ${n === exChart ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+    <canvas id="cEX" aria-label="Kraftverlauf"></canvas><div class="small mute">Rekord: <b style="color:#fff" class="num">${fmt(S.prs[exChart] || 0)} kg</b></div>` : '<p class="mute" style="margin:0">Noch keine Daten.</p>'}
+  </div></section>
+  <section class="win"><h2><span>◆ Kalender</span><small>blau = Training · gold = Quest</small></h2>
+    <div class="cal">${['Mo','Di','Mi','Do','Fr','Sa','So'].map(x => `<div class="hd">${x}</div>`).join('')}${cells.join('')}</div></section>
+  <section class="win"><h2><span>◆ Verlauf</span></h2><div class="stack">
+    ${S.workouts.slice(-10).reverse().map(w => `<div class="hist"><div><b>${w.type}</b> <span class="mute small">${niceDate(w.date)}</span><div class="small mute">${w.ex.map(e => esc(e.name)).join(', ')}</div></div><button class="btn sm ghost" data-a="wDel" data-v="${w.id}" aria-label="Training löschen">✕</button></div>`).join('') || '<p class="mute" style="margin:0">Noch keine Trainings.</p>'}
+  </div></section>`;
+}
+function exSeries(name) {
+  const pts = [];
+  for (const t of S.tests) { const k = Object.keys(LIFT).find(k => LIFT[k] === name); if (k && t[k]) pts.push({d: t.date, y: e1rm(t[k].w, t[k].r)}); }
+  for (const w of S.workouts) { const e = w.ex.find(x => x.name === name); if (e) pts.push({d: w.date, y: Math.max(...e.sets.map(s => e1rm(effW(name, s.w), s.r)))}); }
+  return pts.sort((a, b) => a.d < b.d ? -1 : 1);
+}
+function drawChart(id, pts, color) {
+  const c = document.getElementById(id); if (!c) return;
+  const dpr = window.devicePixelRatio || 1, W = c.clientWidth, H = c.clientHeight;
+  c.width = W * dpr; c.height = H * dpr; const g = c.getContext('2d'); g.scale(dpr, dpr);
+  g.font = '11px Inter, system-ui, sans-serif'; g.fillStyle = '#7f93b6';
+  if (pts.length < 2) { g.fillText(pts.length ? 'Ab zwei Einträgen erscheint hier dein Verlauf.' : 'Noch keine Einträge.', 8, H / 2); return; }
+  const ys = pts.map(p => p.y); let lo = Math.min(...ys), hi = Math.max(...ys); if (hi - lo < 1) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.15; lo -= pad; hi += pad;
+  const t0 = pdate(pts[0].d).getTime(), t1 = Math.max(t0 + 864e5, pdate(pts[pts.length - 1].d).getTime());
+  const L = 38, R = 10, Tp = 10, B = 20, X = t => L + (t - t0) / (t1 - t0) * (W - L - R), Y = y => Tp + (hi - y) / (hi - lo) * (H - Tp - B);
+  g.strokeStyle = 'rgba(77,163,255,.15)'; g.lineWidth = 1;
+  for (let i = 0; i <= 3; i++) { const v = lo + (hi - lo) * i / 3, y = Y(v); g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke(); g.fillText(fmt(v, 0), 4, y + 4); }
+  g.fillText(niceDate(pts[0].d), L, H - 4); const lt = niceDate(pts[pts.length - 1].d); g.fillText(lt, W - R - g.measureText(lt).width, H - 4);
+  const xy = pts.map(p => [X(pdate(p.d).getTime()), Y(p.y)]);
+  const grad = g.createLinearGradient(0, Tp, 0, H - B); grad.addColorStop(0, color + '55'); grad.addColorStop(1, color + '00');
+  g.beginPath(); g.moveTo(xy[0][0], H - B); xy.forEach(([x, y]) => g.lineTo(x, y)); g.lineTo(xy[xy.length - 1][0], H - B); g.closePath(); g.fillStyle = grad; g.fill();
+  g.beginPath(); xy.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.strokeStyle = color; g.lineWidth = 2; g.shadowColor = color; g.shadowBlur = 8; g.stroke(); g.shadowBlur = 0;
+  const [lx, ly] = xy[xy.length - 1]; g.beginPath(); g.arc(lx, ly, 4, 0, 7); g.fillStyle = '#fff'; g.fill();
+}
+function drawCharts() {
+  drawChart('cBW', S.bw.map(b => ({d: b.date, y: b.kg})), '#4da3ff');
+  if (Object.keys(S.prs).length) drawChart('cEX', exSeries(exChart), '#ffc94d');
+}
+
+function vWissen() {
+  const K = [
+    ['Trainingsmenge', 'Mehr harte Sätze bringen mehr Muskelaufbau, bis etwa 10–20 Sätze pro Muskel und Woche. Darüber steigt vor allem die Ermüdung. Der Volumen-Tracker unter Fortschritt zeigt dir, wo du stehst.', 'Schoenfeld, Ogborn & Krieger (2017), Meta-Analyse zur Dosis-Wirkung von Trainingsvolumen'],
+    ['Progressive Überlastung', 'Muskeln wachsen, wenn die Belastung über die Zeit steigt. Die App nutzt doppelte Progression: Erst steigerst du die Wiederholungen bis zum oberen Ende der Spanne, dann das Gewicht.', 'Grundprinzip der Trainingslehre, u. a. ACSM Position Stand (2009)'],
+    ['Nah ans Versagen', 'Sätze wirken am besten, wenn du etwa 0–3 Wiederholungen vor dem Muskelversagen aufhörst (RIR 0–3). Ganz bis zum Versagen bringt bei schweren Grundübungen kaum Zusatznutzen, aber mehr Ermüdung.', 'Refalo et al. (2023), Meta-Analyse zur Nähe zum Muskelversagen'],
+    ['Wiederholungsbereich', 'Muskelaufbau funktioniert von etwa 6 bis 30 Wiederholungen, solange die Sätze hart sind. Für Kraft sind schwere Gewichte im Bereich 3–8 besser. Deshalb nutzt die App 6–10 für Grundübungen und 10–15 für Isolationsübungen.', 'Schoenfeld et al. (2017/2021), Reviews zu Belastungsintensität'],
+    ['Trainingsfrequenz', 'Jeden Muskel etwa 2× pro Woche zu trainieren ist leicht besser als 1×, wenn das Volumen gleich ist. Mit deiner Rotation kommst du an Wochen mit 5 oder mehr Trainings automatisch näher daran.', 'Schoenfeld, Ogborn & Krieger (2016), Meta-Analyse zur Trainingsfrequenz'],
+    ['Abnehmen ohne Muskelverlust', 'Ziel sind 0,5–1 % Körpergewicht pro Woche. Schneller kostet eher Muskeln und Kraft. Die App warnt dich, wenn du zu schnell abnimmst.', 'Helms et al. (2014), Empfehlungen für Diätphasen; Garthe et al. (2011)'],
+    ['Eiweiß', 'Etwa 1,6 g Eiweiß pro kg Körpergewicht am Tag reichen den meisten für maximalen Muskelaufbau. In einer Diät ist eher mehr sinnvoll, bis etwa 2,2 g. Deshalb gibt es die Eiweiß-Quest.', 'Morton et al. (2018), Meta-Analyse; Helms et al. (2014)'],
+    ['Cardio und Muskelaufbau', 'Cardio bremst den Muskelaufbau kaum, solange es moderat bleibt. Laufen stört die Beine etwas mehr als Radfahren. Lege harte Cardio-Einheiten möglichst nicht direkt vor den Beintag.', 'Wilson et al. (2012); Schumann et al. (2022), Meta-Analysen zum Interferenzeffekt'],
+    ['Geschätztes Maximum', 'Die App rechnet dein Maximum mit der Epley-Formel aus Gewicht und Wiederholungen: Gewicht × (1 + Wdh. / 30). Bei bis zu etwa 10 Wiederholungen ist das recht genau und sicherer als ein echter Maximalversuch.', 'Epley (1985); LeSuer et al. (1997)'],
+    ['Schlaf', 'Zu wenig Schlaf verschlechtert Regeneration, Kraft und die Körperzusammensetzung in einer Diät. 7–9 Stunden sind das Ziel.', 'Nedeltcheva et al. (2010); Dattilo et al. (2011)'],
+  ];
+  return `<section class="win"><h2><span>◆ System-Wissen</span></h2><p class="small mute" style="margin:0">Nach diesen Regeln arbeitet die App. Die Quellen sind Meta-Analysen und Übersichtsarbeiten, also Zusammenfassungen vieler Studien. Das ist keine medizinische Beratung.</p></section>
+  ${K.map(([h, p, s]) => `<section class="win know"><h3>${h}</h3><p>${p}</p><div class="src">Quelle: ${s}</div></section>`).join('')}`;
+}
+
+/* ============ Einstufungstest ============ */
+let ob = null, sw = {iv: null, start: 0, el: null};
+const OB = [
+  {k:'intro'}, {k:'body'},
+  {k:'lift', f:'bench', name:'Bankdrücken'}, {k:'lift', f:'squat', name:'Kniebeugen'}, {k:'lift', f:'dead', name:'Kreuzheben'}, {k:'lift', f:'ohp', name:'Schulterdrücken'},
+  {k:'reps', f:'push', name:'Liegestütze', hint:'Saubere Liegestütze: Körper gerade, Brust fast am Boden. So viele wie möglich am Stück.'},
+  {k:'reps', f:'pull', name:'Klimmzüge', hint:'Aus dem gestreckten Hang, Kinn über die Stange. So viele wie möglich am Stück. 0 ist auch okay.'},
+  {k:'plank'}, {k:'run'}, {k:'result'},
+];
+function startOb(retest) { ob = {i: retest ? 1 : 0, retest: !!retest, d: JSON.parse(JSON.stringify(S.tests.length ? T() : {}))}; $('#nav').hidden = true; render(); }
+function renderOb() {
+  if (!ob) ob = {i: 0, retest: false, d: {}};
+  const st = OB[ob.i], d = ob.d, app = $('#app'), n = OB.length;
+  stopSW();
+  const steps = `<div class="steps">${OB.map((_, i) => `<i class="${i <= ob.i ? 'on' : ''}"></i>`).join('')}</div>`;
+  const nav = (next = 'Weiter', skip = true) => `<div class="row">${ob.i > (ob.retest ? 1 : 0) ? '<button class="btn ghost" data-a="obBack">Zurück</button>' : (ob.retest ? '<button class="btn ghost" data-a="obCancel">Abbrechen</button>' : '')}${skip ? '<button class="btn ghost" data-a="obSkip">Überspringen</button>' : ''}<button class="btn pri grow" data-a="obNext">${next}</button></div>`;
+  let h = '';
+  if (st.k === 'intro') h = `<section class="win"><h2><span>◆ System</span></h2><div class="stack">
+    <p class="ob-big">Das System hat dich registriert.</p>
+    <p>Bevor die Quests beginnen, misst es deine aktuelle Stärke und Ausdauer. Daraus berechnet es deinen Rang und Quests, die dich fordern, aber nicht überfordern.</p>
+    <p class="small mute">Dauer: etwa ein Gym-Besuch. Du kannst jeden Test überspringen und ihn später in der Rang-Prüfung nachholen.</p>
+    <label>Spielername<input id="obName" value="${esc(S.name)}" placeholder="Dein Name" autocomplete="nickname"></label>
+    ${nav('Test beginnen', false)}</div></section>`;
+  if (st.k === 'body') h = `<section class="win"><h2><span>◆ Körperdaten</span></h2><div class="stack">
+    <div class="grid2"><label>Gewicht (kg)<input id="obBw" inputmode="decimal" value="${d.bw || ''}" placeholder="85"></label>
+    <label>Bauchumfang (cm)<input id="obWaist" inputmode="decimal" value="${d.waist || ''}" placeholder="optional"></label></div>
+    <label>Zielgewicht: dein Peak (kg)<input id="obPeak" inputmode="decimal" value="${S.peak || ''}" placeholder="optional, z. B. 78"></label>
+    <p class="small mute" style="margin:0">Bauchumfang auf Höhe des Bauchnabels messen, morgens nüchtern. Das zeigt Fettverlust oft besser als die Waage.</p>
+    ${nav('Weiter', false)}</div></section>`;
+  if (st.k === 'lift') { const v = d[st.f] || {};
+    h = `<section class="win"><h2><span>◆ Krafttest</span><small>${ob.i - 1} / 4</small></h2><div class="stack">
+    <p class="ob-big">${st.name}</p>
+    <ol class="small" style="margin:0;padding-left:18px"><li>Aufwärmen: 2–3 leichte Sätze.</li><li>Wähle ein Gewicht, das du etwa 5–10× schaffst.</li><li>So viele saubere Wiederholungen wie möglich. Hör auf, wenn die Technik bricht.</li></ol>
+    <p class="small mute" style="margin:0">Kein echter Maximalversuch nötig: Die App rechnet dein Maximum aus. Das ist sicherer ohne Spotter. Beim Bankdrücken die Sicherheitsablagen nutzen.</p>
+    <div class="grid2"><label>Gewicht (kg)<input id="obW" inputmode="decimal" value="${v.w || ''}" placeholder="60"></label><label>Wiederholungen<input id="obR" inputmode="numeric" value="${v.r || ''}" placeholder="8"></label></div>
+    <div id="obEst" class="small mute"></div>
+    ${nav()}</div></section>`; }
+  if (st.k === 'reps') h = `<section class="win"><h2><span>◆ Eigengewicht</span></h2><div class="stack">
+    <p class="ob-big">${st.name}</p><p class="small" style="margin:0">${st.hint}</p>
+    <label>Maximale Wiederholungen<input id="obN" inputmode="numeric" value="${d[st.f] ?? ''}" placeholder="0"></label>${nav()}</div></section>`;
+  if (st.k === 'plank') h = `<section class="win"><h2><span>◆ Core-Test</span></h2><div class="stack">
+    <p class="ob-big">Plank</p><p class="small" style="margin:0">Unterarmstütz, Körper gerade, Po nicht nach oben. Starte die Stoppuhr und halte so lange du kannst.</p>
+    <div class="clock num" id="swClock">0:00</div>
+    <button class="btn full" data-a="swToggle" id="swBtn">Stoppuhr starten</button>
+    <label>Gehaltene Sekunden<input id="obN" inputmode="numeric" value="${d.plank || ''}" placeholder="60"></label>${nav()}</div></section>`;
+  if (st.k === 'run') h = `<section class="win"><h2><span>◆ Ausdauertest</span></h2><div class="stack">
+    <p class="ob-big">12 Minuten Laufband</p><p class="small" style="margin:0">Cooper-Test: Lauf 12 Minuten so weit wie möglich, bei 1 % Steigung. Gleichmäßiges Tempo, Gehpausen sind erlaubt. Danach liest du die Distanz am Laufband ab.</p>
+    <div class="clock num" id="swClock">12:00</div>
+    <button class="btn full" data-a="cdToggle" id="swBtn">12-Minuten-Timer starten</button>
+    <label>Distanz in Metern<input id="obN" inputmode="numeric" value="${d.run || ''}" placeholder="2000"></label>${nav()}</div></section>`;
+  if (st.k === 'result') {
+    const t = Object.assign({}, DEF, d), bw = t.bw;
+    const prev = S.tests.length ? T() : null;
+    const rel = (e1rm(t.bench.w, t.bench.r) + e1rm(t.squat.w, t.squat.r) + e1rm(t.dead.w, t.dead.r)) / bw;
+    const st2 = {STR: Math.round(rel * 8), VIT: Math.round(t.plank / 10 + t.push / 3), AGI: Math.round(t.run / 150), DIS: S.streak};
+    const rk = rankOf(st2);
+    const line = (lbl, v, pv, u) => `<div class="hist"><span>${lbl}</span><span class="num">${pv !== null && pv !== undefined ? `<span class="mute">${fmt(pv)} → </span>` : ''}<b>${fmt(v)}</b> ${u}</span></div>`;
+    const pe = k => prev ? e1rm(prev[k].w, prev[k].r) : null;
+    h = `<section class="win gold"><h2><span>◆ Auswertung</span></h2><div class="stack">
+      <p class="sysbig">RANG ${rk.r}</p>
+      <div class="stats">${Object.entries(st2).map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+      <div>${Object.keys(LIFT).map(k => line(LIFT[k], e1rm(t[k].w, t[k].r), pe(k), 'kg')).join('')}
+      ${line('Liegestütze', t.push, prev && prev.push, '')}${line('Klimmzüge', t.pull, prev && prev.pull, '')}${line('Plank', t.plank, prev && prev.plank, 's')}${line('12 min Lauf', t.run, prev && prev.run, 'm')}</div>
+      <p class="small mute" style="margin:0">Kraftwerte sind geschätzte Maxima. Übersprungene Tests nutzen Standardwerte, bis du sie nachholst.</p>
+      <div class="row"><button class="btn ghost" data-a="obBack">Zurück</button><button class="btn pri grow" data-a="obFinish">${ob.retest ? 'Prüfung abschließen' : 'System starten'}</button></div></div></section>`;
+  }
+  app.innerHTML = steps + h;
+  if (st.k === 'lift') { const upd = () => { const w = num($('#obW').value), r = num($('#obR').value); $('#obEst').textContent = w && r ? `Geschätztes Maximum: ${fmt(e1rm(w, r))} kg${r > 12 ? ' (bei über 12 Wdh. ungenauer, lieber schwerer testen)' : ''}` : ''; };
+    $('#obW').addEventListener('input', upd); $('#obR').addEventListener('input', upd); upd(); }
+  window.scrollTo(0, 0);
+}
+function obRead(skip) {
+  const st = OB[ob.i], d = ob.d;
+  if (st.k === 'intro') S.name = $('#obName').value.trim();
+  if (st.k === 'body') { const bw = num($('#obBw').value); if (!bw) { toast('Bitte dein Gewicht eintragen'); return false; } d.bw = bw; d.waist = num($('#obWaist').value); const p = num($('#obPeak').value); S.peak = p || null; }
+  if (skip) return true;
+  if (st.k === 'lift') { const w = num($('#obW').value), r = Math.round(num($('#obR').value)); if (!w || !r) { toast('Gewicht und Wiederholungen eintragen oder überspringen'); return false; } d[st.f] = {w, r}; }
+  if (st.k === 'reps' || st.k === 'plank' || st.k === 'run') { const v = $('#obN').value; if (v === '') { toast('Wert eintragen oder überspringen'); return false; } d[st.k === 'reps' ? st.f : st.k] = Math.round(num(v)); }
+  return true;
+}
+function obFinish() {
+  const t = dkey(), test = Object.assign({}, DEF, ob.d, {date: t});
+  S.tests.push(test);
+  for (const k of Object.keys(LIFT)) { const v = e1rm(test[k].w, test[k].r); if (v > (S.prs[LIFT[k]] || 0)) S.prs[LIFT[k]] = Math.round(v * 10) / 10; }
+  if (!S.bw.length || S.bw[S.bw.length - 1].date !== t) S.bw.push({date: t, kg: test.bw}); else S.bw[S.bw.length - 1].kg = test.bw;
+  const wasRetest = ob.retest;
+  if (!S.created) { S.created = t; S.lastProcessed = t; }
+  ob = null;
+  checkDungeons(); makeDungeons(); save();
+  view = 'status'; render(); checkWeekly();
+  if (wasRetest) gainXP(150, 'Rang-Prüfung', true);
+  else queue(() => sysWin('', 'System', `<p class="sysbig">WILLKOMMEN</p><p>Ab jetzt bekommst du jeden Tag 3 Quests zur Auswahl. Verpasst du einen Tag, wartet eine Strafquest.</p><p class="small mute">Tipp: In Safari auf Teilen → „Zum Home-Bildschirm“ tippen, dann läuft ASCEND wie eine App.</p>`, [['Los geht’s', 'close']]));
+}
+function stopSW() { clearInterval(sw.iv); sw.iv = null; }
+
+/* ============ Einstellungen & Backup ============ */
+function settings() {
+  sysWin('', 'System', `<div class="stack">
+    <button class="btn full" data-a="export">Backup sichern</button>
+    <label class="btn full" style="flex-direction:row;justify-content:center;color:var(--glow2)">Backup laden<input type="file" id="importIn" accept="application/json,.json" hidden></label>
+    <button class="btn full" data-a="retest">Rang-Prüfung starten</button>
+    <button class="btn red full" data-a="resetAsk">Alles zurücksetzen</button>
+    <p class="small mute" style="margin:0">Deine Daten liegen nur auf diesem Gerät. Sichere regelmäßig ein Backup, zum Beispiel in iCloud Drive.</p></div>`, [['Schließen', 'close', 'ghost']]);
+}
+async function doExport() {
+  const json = JSON.stringify(S), name = `ascend-backup-${dkey()}.json`;
+  try {
+    const file = new File([json], name, {type: 'application/json'});
+    if (navigator.canShare && navigator.canShare({files: [file]})) { await navigator.share({files: [file], title: 'ASCEND Backup'}); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([json], {type: 'application/json'})); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  toast('Backup gespeichert');
+}
+function doImport(file) {
+  const r = new FileReader();
+  r.onload = () => { try { const d = JSON.parse(r.result); if (!d || d.v !== 1 || !Array.isArray(d.workouts)) throw 0; S = Object.assign(fresh(), d); save(); closeModal(); view = 'status'; render(); toast('Backup geladen'); } catch (e) { toast('Diese Datei ist kein ASCEND-Backup'); } };
+  r.readAsText(file);
+}
+
+/* ============ Ereignisse ============ */
+const H = {
+  nav: b => { view = b.dataset.v; render(); window.scrollTo(0, 0); },
+  close: () => closeModal(),
+  settings: () => settings(),
+  choose: b => { const d = today(), q = QBY[b.dataset.v]; d.chosen = q.id; d.text = q.t(diff()); d.xp = q.xp; S.questHistory[q.id] = dkey(); save(); render(); },
+  questDone: () => {
+    if (penaltyOpen()) { toast('Erst die Strafquest erledigen'); return; }
+    const d = today(), t = dkey(); if (d.done) return;
+    d.done = true; S.streak = S.lastQuestDate === addDays(t, -1) ? S.streak + 1 : 1; S.lastQuestDate = t; S.bestStreak = Math.max(S.bestStreak, S.streak);
+    S.cnt.daily++; if (QBY[d.chosen].cat === 'Cardio') S.cnt.cardio++;
+    save(); gainXP(d.xp + Math.min(50, S.streak * 5), `Daily Quest${S.streak > 1 ? ' · Streak ' + S.streak : ''}`); checkWeekly(); render();
+  },
+  penDone: () => { S.penalty.done = true; S.cnt.penalties++; save(); toast('Strafe erledigt. XP sind wieder freigeschaltet'); render(); },
+  start: b => startWorkout(b.dataset.v),
+  setDone: b => { const s = S.active.ex[b.dataset.i].sets[b.dataset.j]; s.done = !s.done; save(); if (s.done) startTimer(S.active.ex[b.dataset.i].kind === 'c' ? 120 : 75); render(); },
+  setAdd: b => { const e = S.active.ex[b.dataset.i], l = e.sets[e.sets.length - 1] || {w: 0, r: 8, rir: 2}; e.sets.push({w: l.w, r: l.r, rir: l.rir, done: false}); save(); render(); },
+  setDel: b => { S.active.ex[b.dataset.i].sets.pop(); save(); render(); },
+  exDel: b => { S.active.ex.splice(b.dataset.i, 1); save(); render(); },
+  exAdd: () => {
+    const used = new Set(S.active.ex.map(e => e.name)), all = [];
+    for (const t of TYPES) for (const x of TPL[t]) if (!used.has(x[0]) && !all.some(a => a[0] === x[0])) all.push(x);
+    sysWin('', 'Übung hinzufügen', `<div class="stack">${all.map(x => `<button class="quest" data-a="exPick" data-v="${esc(x.join('|'))}"><div class="grow"><div class="t" style="font-size:15px">${esc(x[0])}</div></div><span class="chip">${x[1]}</span></button>`).join('')}
+      <div class="ex"><b class="small">Eigene Übung</b><input id="cxName" placeholder="Name, z. B. Kabelzug-Fliegende"><div class="grid2"><select id="cxMus">${MUSCLES.map(m => `<option>${m}</option>`).join('')}<option>Unterarme</option><option>Core</option></select>
+      <select id="cxKind"><option value="c">Grundübung (6–10)</option><option value="i">Isolation (10–15)</option></select></div><button class="btn" data-a="exCustom">Hinzufügen</button></div></div>`, [['Schließen', 'close', 'ghost']]);
+  },
+  exPick: b => { const [n, m, k] = b.dataset.v.split('|'); S.active.ex.push(newEx(n, m, k)); save(); closeModal(); render(); },
+  exCustom: () => { const n = $('#cxName').value.trim(); if (!n) { toast('Bitte einen Namen eingeben'); return; } S.active.ex.push(newEx(n, $('#cxMus').value, $('#cxKind').value)); save(); closeModal(); render(); },
+  wFinish: () => finishWorkout(),
+  wCancel: () => sysWin('red', 'Training abbrechen', '<p>Das Training wird verworfen. Abgehakte Sätze gehen verloren.</p>', [['Weiter trainieren', 'close', 'ghost'], ['Verwerfen', 'wCancelYes', 'red']]),
+  wCancelYes: () => { S.active = null; stopTimer(); save(); closeModal(); render(); },
+  wDel: b => sysWin('red', 'Training löschen', '<p>Dieses Training wird endgültig gelöscht. Die XP bleiben.</p>', [['Behalten', 'close', 'ghost'], ['Löschen', 'wDelYes|' + b.dataset.v, 'red']]),
+  tmr: b => { timerEnd += num(b.dataset.v) * 1000; drawTimer(); },
+  tmrx: () => stopTimer(),
+  bwAdd: () => { const kg = num($('#bwIn').value); if (kg < 30 || kg > 300) { toast('Bitte ein Gewicht in kg eintragen'); return; } const t = dkey(), last = S.bw[S.bw.length - 1];
+    if (last && last.date === t) last.kg = kg; else S.bw.push({date: t, kg}); save(); toast('Gewicht eingetragen'); checkDungeons(); checkWeekly(); render(); },
+  peakSet: () => { const p = num($('#peakIn').value); S.peak = p || null; if (S.peak && !S.dungeons.some(d => d.kind === 'bw' && !d.done) && S.peak < curBW()) S.dungeons.push({id:'d_bw', name:'Alte Form', kind:'bw', target:S.peak, unit:'kg Körpergewicht', done:false});
+    S.dungeons.forEach(d => { if (d.kind === 'bw' && !d.done) d.target = S.peak; }); save(); toast('Ziel gespeichert'); render(); },
+  export: () => doExport(),
+  retest: () => { closeModalSilent(); startOb(true); },
+  resetAsk: () => sysWin('red', 'Alles zurücksetzen', '<p>Alle Daten auf diesem Gerät werden gelöscht: Level, Trainings, Tests. Das lässt sich nicht rückgängig machen, außer du hast ein Backup.</p>', [['Abbrechen', 'close', 'ghost'], ['Endgültig löschen', 'resetYes', 'red']]),
+  resetYes: () => { S = fresh(); save(); closeModalSilent(); ob = null; view = 'status'; render(); },
+  obNext: () => { if (!obRead(false)) return; ob.i++; render(); },
+  obSkip: () => { obRead(true); ob.i++; render(); },
+  obBack: () => { ob.i = Math.max(0, ob.i - 1); render(); },
+  obCancel: () => { ob = null; render(); },
+  obFinish: () => obFinish(),
+  swToggle: b => {
+    if (sw.iv) { stopSW(); const s = Math.round((Date.now() - sw.start) / 1000); $('#obN').value = s; b.textContent = 'Nochmal starten'; return; }
+    sw.start = Date.now(); b.textContent = 'Stopp'; sw.iv = setInterval(() => { const s = Math.floor((Date.now() - sw.start) / 1000); const c = $('#swClock'); if (c) c.textContent = `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; }, 200);
+  },
+  cdToggle: b => {
+    if (sw.iv) { stopSW(); b.textContent = 'Timer neu starten'; return; }
+    sw.start = Date.now(); b.textContent = 'Timer stoppen';
+    sw.iv = setInterval(() => { const left = Math.max(0, 720 - Math.floor((Date.now() - sw.start) / 1000)); const c = $('#swClock'); if (c) c.textContent = `${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
+      if (!left) { stopSW(); b.textContent = 'Zeit um! Distanz eintragen'; try { navigator.vibrate && navigator.vibrate(600); } catch (e) {} } }, 250);
+  },
+};
+function closeModalSilent() { $('#modal').hidden = true; $('#modal').innerHTML = ''; popQ = []; popOpen = false; }
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b || b.tagName === 'SELECT') return;
+  const [a, arg] = b.dataset.a.split('|');
+  if (a === 'wDelYes') { S.workouts = S.workouts.filter(w => String(w.id) !== arg); save(); closeModal(); render(); return; }
+  if (H[a]) H[a](b);
+});
+document.addEventListener('input', e => {
+  const el = e.target; if (!el.dataset.f || !S.active) return;
+  const s = S.active.ex[el.dataset.i].sets[el.dataset.j]; s[el.dataset.f] = el.dataset.f === 'rir' ? num(el.value) : el.value; save();
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'exSel') { exChart = e.target.value; render(); }
+  if (e.target.id === 'importIn' && e.target.files[0]) doImport(e.target.files[0]);
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.created && !ob) { processDays(); render(); } });
+
+/* ============ Start ============ */
+processDays();
+render();
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
