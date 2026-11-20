@@ -1,5 +1,5 @@
 // Offline-Cache: zeigt sofort die gespeicherte Version und holt im Hintergrund Updates.
-const CACHE = 'ascend-v5';
+const CACHE = 'ascend-v6';
 const ASSETS = ['./', 'index.html', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -15,7 +15,9 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   e.respondWith(caches.match(e.request).then(cached => {
-    const net = fetch(e.request).then(res => {
+    // no-cache: immer beim Server nachfragen, damit Updates nicht im Browser-Cache hängen bleiben
+    const sameOrigin = new URL(e.request.url).origin === self.location.origin;
+    const net = fetch(e.request, sameOrigin ? {cache: 'no-cache'} : undefined).then(res => {
       if (res && (res.ok || res.type === 'opaque')) {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy));
