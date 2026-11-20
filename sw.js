@@ -1,5 +1,5 @@
 // Offline-Cache: zeigt sofort die gespeicherte Version und holt im Hintergrund Updates.
-const CACHE = 'ascend-v4';
+const CACHE = 'ascend-v5';
 const ASSETS = ['./', 'index.html', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

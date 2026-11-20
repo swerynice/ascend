@@ -206,8 +206,9 @@ function publicProfile() {
     prs: {bench: p('Bankdrücken'), squat: p('Kniebeugen'), dead: p('Kreuzheben')},
     title: S.titles[S.titles.length - 1] || null, updated_at: new Date().toISOString()};
 }
+let pulled = false; // bis die Cloud beim Start geprüft wurde, wird nichts hochgeladen
 async function pushNow() {
-  if (!sb || !S.acc || !navigator.onLine || pushing) return false;
+  if (!sb || !S.acc || !navigator.onLine || pushing || !pulled) return false;
   pushing = true;
   try {
     const {data: {session}} = await sb.auth.getSession();
@@ -229,7 +230,10 @@ async function pullIfNewer() {
   const {data, error} = await sb.from('saves').select('data, updated_at').eq('id', S.acc.id).maybeSingle();
   if (error || !data) return false;
   const cloud = data.data;
-  if (cloud && (cloud.updatedAt || 0) > (S.updatedAt || 0) + 5000) { const acc = S.acc; S = Object.assign(fresh(), cloud, {acc}); writeLocal(); return true; }
+  // Neuer heißt: in der Cloud wurde nach unserer letzten Sicherung etwas geändert (anderes Gerät oder Korrektur).
+  if (cloud && (cloud.updatedAt || 0) > (S.lastSync || 0) + 1000 && (cloud.updatedAt || 0) !== (S.updatedAt || 0)) {
+    const acc = S.acc; S = Object.assign(fresh(), cloud, {acc, lastSync: Date.now()}); writeLocal(); return true;
+  }
   return false;
 }
 async function register(u, pin) {
@@ -1176,22 +1180,59 @@ function pushIfDirty() { if (S.acc && (dirty() || (S.feedQ || []).length)) retur
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden) { pushIfDirty(); return; }
   if (!S.acc || ob || S.active) return;
-  try { if (!dirty() && await pullIfNewer()) toast('Fortschritt aus der Cloud geladen'); } catch (e) {}
+  try { if (await pullIfNewer()) toast('Fortschritt aus der Cloud geladen'); } catch (e) {}
   if (S.created) { processDays(); render(); }
 });
 window.addEventListener('online', () => pushIfDirty());
 
+/* ============ Datenpflege: alte Übungsnamen und -arten auf den Katalog umstellen ============ */
+const ALIAS = {'Chest Press':'Brustpresse', 'Flys':'Butterfly', 'Back Extensions':'Hyperextensions', 'Lateral Raises':'Seitheben',
+  'Bizepsmaschine':'Bizeps-Maschine', 'Trizeps Dip':'Dips', 'Trizeps Dips':'Dips', 'Beinbeuger Maschine':'Beinbeuger sitzend'};
+function convertSets(name, from, to, sets) {
+  const wasW = from === 'c' || from === 'i' || from === 'bw';
+  if (to === 'time' && wasW) return sets.map(s => ({s: name === 'Plank' && num(s.r) <= 5 ? num(s.r) * 60 : num(s.r)})); // Plank "1" = 1 Minute
+  if (to === 'cardio' && wasW) return sets.map(s => ({min: num(s.r), km: 0}));
+  return sets;
+}
+function recalcPRs() {
+  const prs = {}, prU = {};
+  for (const t of S.tests) for (const k of Object.keys(LIFT)) if (t[k]) { const v = e1rm(t[k].w, t[k].r); if (v > (prs[LIFT[k]] || 0)) { prs[LIFT[k]] = v; prU[LIFT[k]] = 'kg'; } }
+  for (const w of S.workouts) for (const e of w.ex) {
+    if (!e.sets.length) continue;
+    const k = e.kind || kindOf(e.name), unit = k === 'cardio' ? (e.sets.some(s => num(s.km) > 0) ? 'km' : 'min') : UNIT[k];
+    if (prU[e.name] && prU[e.name] !== unit) continue;
+    const v = Math.max(...e.sets.map(s => setMetric(k, s)));
+    if (v > (prs[e.name] || 0)) { prs[e.name] = v; prU[e.name] = unit; }
+  }
+  for (const n in prs) prs[n] = Math.round(prs[n] * 100) / 100;
+  S.prs = prs; S.prU = prU;
+}
+function migrate() {
+  if ((S.mig || 0) >= 1) return false;
+  for (const w of S.workouts) for (const e of w.ex) {
+    const n = ALIAS[e.name] || e.name, info = EXI[n];
+    e.name = n;
+    if (info) { const from = e.kind || 'c'; e.sets = convertSets(n, from, info.k, e.sets); e.kind = info.k; e.muscle = info.m; }
+  }
+  if (S.active) for (const e of S.active.ex) { const n = ALIAS[e.name] || e.name; if (EXI[n]) { e.name = n; e.kind = EXI[n].k; e.muscle = EXI[n].m; } }
+  recalcPRs(); S.mig = 1; return true;
+}
+
 /* ============ Start ============ */
-processDays();
+// Erst prüfen, ob die Cloud neuer ist, dann migrieren, erst danach darf hochgeladen werden.
 render();
 (async () => {
-  if (!S.acc || !sb) return;
-  try {
-    const {data: {session}} = await sb.auth.getSession();
-    if (!session) { S.syncErr = 'Bitte neu anmelden'; writeLocal(); return; }
-    if (!S.active && !ob && !dirty() && await pullIfNewer()) { processDays(); render(); toast('Fortschritt aus der Cloud geladen'); }
-    pushIfDirty();
-  } catch (e) {}
+  if (S.acc && sb && navigator.onLine) {
+    try {
+      const {data: {session}} = await sb.auth.getSession();
+      if (!session) { S.syncErr = 'Bitte neu anmelden'; writeLocal(); }
+      else if (!S.active && !ob && await pullIfNewer()) toast('Fortschritt aus der Cloud geladen');
+    } catch (e) {}
+  }
+  pulled = true;
+  if (migrate()) save();
+  if (S.created && !ob) { processDays(); render(); }
+  pushIfDirty();
 })();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
