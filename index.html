@@ -730,7 +730,7 @@ function feedRows() {
 }
 async function loadLadder() {
   if (!sb || !navigator.onLine) { ladder = ladder || {err: 'Offline. Die Rangliste lädt, sobald du Internet hast.'}; drawLadder(); return; }
-  await pushNow();
+  await pushIfDirty();
   const [a, b] = await Promise.all([sb.from('profiles').select('*'), sb.from('feed').select('*').order('created_at', {ascending: false}).limit(40)]);
   ladder = a.error || b.error ? {err: 'Rangliste konnte nicht geladen werden. Versuch es gleich nochmal.'} : {pr: a.data, fd: b.data};
   drawLadder();
@@ -1169,11 +1169,17 @@ document.addEventListener('change', e => {
   if (e.target.id === 'importIn' && e.target.files[0]) doImport(e.target.files[0]);
 });
 document.addEventListener('submit', e => { if (e.target.id === 'authForm') { e.preventDefault(); submitAuth(); } });
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { if (S.acc) pushNow(); return; }
-  if (S.acc && S.created && !ob && !S.active) { processDays(); render(); }
+/* Nur hochladen, wenn sich seit der letzten Sicherung etwas geändert hat. So überschreibt ein
+   veraltetes Handy nie neuere Daten in der Cloud, nur weil die App kurz geöffnet wurde. */
+const dirty = () => (S.updatedAt || 0) > (S.lastSync || 0);
+function pushIfDirty() { if (S.acc && (dirty() || (S.feedQ || []).length)) return pushNow(); return Promise.resolve(false); }
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) { pushIfDirty(); return; }
+  if (!S.acc || ob || S.active) return;
+  try { if (!dirty() && await pullIfNewer()) toast('Fortschritt aus der Cloud geladen'); } catch (e) {}
+  if (S.created) { processDays(); render(); }
 });
-window.addEventListener('online', () => { if (S.acc) pushNow(); });
+window.addEventListener('online', () => pushIfDirty());
 
 /* ============ Start ============ */
 processDays();
@@ -1183,8 +1189,8 @@ render();
   try {
     const {data: {session}} = await sb.auth.getSession();
     if (!session) { S.syncErr = 'Bitte neu anmelden'; writeLocal(); return; }
-    if (!S.active && !ob && await pullIfNewer()) { processDays(); render(); toast('Fortschritt aus der Cloud geladen'); }
-    pushNow();
+    if (!S.active && !ob && !dirty() && await pullIfNewer()) { processDays(); render(); toast('Fortschritt aus der Cloud geladen'); }
+    pushIfDirty();
   } catch (e) {}
 })();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
